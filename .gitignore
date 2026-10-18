@@ -1,0 +1,31 @@
+# --- Secrets (jamais dans Git, §10) : seuls les *.example sont versionnés ---
+app/env.json
+**/google-services.json
+**/GoogleService-Info.plist
+firmware/include/secrets.h
+backend/.env
+
+# --- FVM ---
+.fvm/
+
+# --- OS / éditeurs ---
+.DS_Store
+Thumbs.db
+.idea/
+*.iml
+.vscode/*
+!.vscode/extensions.json
+!.vscode/settings.json
+!.vscode/launch.json
+
+# --- Firmware (PlatformIO) ---
+firmware/.pio/
+
+# --- Backend (Node-RED) : on versionne flows.json, pas l'état d'exécution ---
+backend/node-red/node_modules/
+backend/node-red/.config.*.json
+backend/node-red/.config.*.json.backup
+backend/node-red/*.backup
+backend/node-red/.flows*.json.backup
+backend/node-red/lib/
+backend/data/
