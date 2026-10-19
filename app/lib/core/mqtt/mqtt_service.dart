@@ -50,6 +50,8 @@ class MqttService {
   MqttSessionState _sessionState = MqttSessionState.disconnected;
   bool _wanted = false; // l'app veut-elle être connectée ? (faux après stop())
   Future<void>? _starting;
+  Completer<void>? _wakeUp; // non nul pendant l'attente du backoff
+  bool _resetBackoff = false;
 
   Stream<MqttInboundMessage> get messages => _messages.stream;
   Stream<MqttSessionState> get sessionStates => _sessionStates.stream;
@@ -104,6 +106,16 @@ class MqttService {
     await _sessionStates.close();
   }
 
+  /// Le réseau vient de revenir : inutile d'attendre la fin du backoff (jusqu'à 30 s).
+  /// Sans effet si la connexion n'est pas voulue (app en arrière-plan) ou déjà là.
+  void retryNow() {
+    final wakeUp = _wakeUp;
+    if (_wanted && wakeUp != null && !wakeUp.isCompleted) {
+      _resetBackoff = true;
+      wakeUp.complete();
+    }
+  }
+
   Future<void> _connectLoop() async {
     var attempt = 0;
     while (_wanted && _sessionState != MqttSessionState.connected) {
@@ -111,7 +123,18 @@ class MqttService {
       final delay = Duration(seconds: min(1 << attempt, _maxBackoff.inSeconds));
       attempt++;
       debugPrint('MQTT : échec, nouvel essai dans ${delay.inSeconds} s');
-      await Future<void>.delayed(delay);
+      // Attente interruptible par retryNow().
+      final wakeUp = _wakeUp = Completer<void>();
+      final timer = Timer(delay, () {
+        if (!wakeUp.isCompleted) wakeUp.complete();
+      });
+      await wakeUp.future;
+      timer.cancel();
+      _wakeUp = null;
+      if (_resetBackoff) {
+        _resetBackoff = false;
+        attempt = 0; // nouveau réseau : on repart d'un délai court
+      }
     }
   }
 

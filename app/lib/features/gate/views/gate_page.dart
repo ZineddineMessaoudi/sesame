@@ -1,6 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../../core/connectivity/connection_notifier.dart';
+import '../../../core/connectivity/connectivity_banner.dart';
+
 import '../viewmodels/gate_command_view_model.dart';
 import '../viewmodels/gate_view_model.dart';
 import 'widgets/gate_command_panel.dart';
@@ -15,33 +18,41 @@ class GatePage extends ConsumerWidget {
     final viewState = ref.watch(gateViewModelProvider);
     final commandState = ref.watch(gateCommandViewModelProvider);
     final commands = ref.read(gateCommandViewModelProvider.notifier);
+    final quality = ref.watch(connectionProvider);
     return Scaffold(
       appBar: AppBar(title: const Text('Sésame')),
       body: SafeArea(
-        child: Center(
-          child: SingleChildScrollView(
-            // Défilement : le texte agrandi (accessibilité) ne doit jamais déborder.
-            padding: const EdgeInsets.all(16),
-            child: ConstrainedBox(
-              constraints: const BoxConstraints(maxWidth: 480),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  GateStatusCard(
-                    gate: viewState.gate,
-                    device: viewState.device,
+        child: Column(
+          children: [
+            ConnectivityBanner(quality: quality),
+            Expanded(
+              child: Center(
+                child: SingleChildScrollView(
+                  // Défilement : le texte agrandi (accessibilité) ne doit jamais déborder.
+                  padding: const EdgeInsets.all(16),
+                  child: ConstrainedBox(
+                    constraints: const BoxConstraints(maxWidth: 480),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        GateStatusCard(
+                          gate: viewState.gate,
+                          device: viewState.device,
+                        ),
+                        const SizedBox(height: 24),
+                        GateCommandPanel(
+                          gateStatus: viewState.gate?.status,
+                          commandState: commandState,
+                          onCommand: commands.request,
+                          onRetry: commands.retry,
+                        ),
+                      ],
+                    ),
                   ),
-                  const SizedBox(height: 24),
-                  GateCommandPanel(
-                    gateStatus: viewState.gate?.status,
-                    commandState: commandState,
-                    onCommand: commands.request,
-                    onRetry: commands.retry,
-                  ),
-                ],
+                ),
               ),
             ),
-          ),
+          ],
         ),
       ),
     );

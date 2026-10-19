@@ -2,11 +2,13 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:sesame/app/app.dart';
 import 'package:sesame/core/config/app_config.dart';
+import 'package:sesame/core/connectivity/network_monitor.dart';
 import 'package:sesame/core/mqtt/mqtt_service.dart';
 import 'package:sesame/core/storage/local_storage.dart';
 import 'package:sesame/features/gate/data/models/gate_snapshot.dart';
 
 import 'helpers/fake_mqtt.dart';
+import 'helpers/fake_network.dart';
 import 'helpers/hive_box.dart';
 
 void main() {
@@ -30,6 +32,7 @@ void main() {
           // Pas de vraie connexion au broker dans un test.
           mqttServiceProvider.overrideWithValue(fakeMqtt().mqtt),
           localStorageProvider.overrideWithValue(LocalStorage(gateState: box)),
+          networkMonitorProvider.overrideWithValue(FakeNetworkMonitor()),
         ],
         child: const SesameApp(),
       ),
