@@ -2,6 +2,9 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:sesame/app/app.dart';
 import 'package:sesame/core/config/app_config.dart';
+import 'package:sesame/core/mqtt/mqtt_service.dart';
+
+import 'helpers/fake_mqtt.dart';
 
 void main() {
   testWidgets('l\'app démarre sur l\'écran du portail', (tester) async {
@@ -16,7 +19,11 @@ void main() {
 
     await tester.pumpWidget(
       ProviderScope(
-        overrides: [appConfigProvider.overrideWithValue(config)],
+        overrides: [
+          appConfigProvider.overrideWithValue(config),
+          // Pas de vraie connexion au broker dans un test.
+          mqttServiceProvider.overrideWithValue(fakeMqtt().mqtt),
+        ],
         child: const SesameApp(),
       ),
     );
