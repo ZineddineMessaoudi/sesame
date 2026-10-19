@@ -1,0 +1,28 @@
+{
+  "version": 1,
+  "author": "Sésame",
+  "editor": "wokwi",
+  "parts": [
+    { "type": "board-esp32-devkit-c-v4", "id": "esp", "top": 0, "left": 0, "attrs": {} },
+    { "type": "wokwi-pushbutton", "id": "bell", "top": -60, "left": 170, "attrs": { "color": "blue", "label": "Sonnette" } },
+    { "type": "wokwi-slide-switch", "id": "manual", "top": 60, "left": 200, "attrs": { "label": "Manuel" } },
+    { "type": "wokwi-servo", "id": "gate", "top": 140, "left": 180, "attrs": {} },
+    { "type": "wokwi-led", "id": "led", "top": -70, "left": -90, "attrs": { "color": "green", "label": "Statut" } },
+    { "type": "wokwi-resistor", "id": "r1", "top": 10, "left": -110, "rotate": 90, "attrs": { "value": "220" } }
+  ],
+  "connections": [
+    [ "esp:TX", "$serialMonitor:RX", "", [] ],
+    [ "esp:RX", "$serialMonitor:TX", "", [] ],
+    [ "esp:13", "bell:1.l", "blue", [] ],
+    [ "bell:2.l", "esp:GND.2", "black", [] ],
+    [ "esp:14", "manual:2", "orange", [] ],
+    [ "manual:3", "esp:GND.2", "black", [] ],
+    [ "esp:18", "gate:PWM", "gold", [] ],
+    [ "gate:V+", "esp:5V", "red", [] ],
+    [ "gate:GND", "esp:GND.1", "black", [] ],
+    [ "esp:25", "r1:2", "green", [] ],
+    [ "r1:1", "led:A", "green", [] ],
+    [ "led:C", "esp:GND.1", "black", [] ]
+  ],
+  "dependencies": {}
+}
