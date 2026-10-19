@@ -1,0 +1,91 @@
+[
+    {
+        "id": "tab-push",
+        "type": "tab",
+        "label": "Push FCM",
+        "disabled": false,
+        "info": "Relaie les évènements MQTT vers les notifications push (§9).\n\nL'app coupe sa session MQTT en arrière-plan (§5) : Node-RED, lui toujours connecté, est le seul à pouvoir encore joindre le téléphone."
+    },
+    {
+        "id": "hivemq",
+        "type": "mqtt-broker",
+        "name": "HiveMQ Cloud",
+        "broker": "${MQTT_HOST}",
+        "port": "${MQTT_PORT}",
+        "clientid": "sesame-nodered",
+        "autoConnect": true,
+        "usetls": true,
+        "protocolVersion": "4",
+        "keepalive": "60",
+        "cleansession": true,
+        "birthTopic": "",
+        "birthQos": "0",
+        "birthPayload": "",
+        "closeTopic": "",
+        "closeQos": "0",
+        "closePayload": "",
+        "willTopic": "",
+        "willQos": "0",
+        "willPayload": "",
+        "sessionExpiry": ""
+    },
+    {
+        "id": "ring-in",
+        "type": "mqtt in",
+        "z": "tab-push",
+        "name": "sonnerie",
+        "topic": "sesame/+/doorbell/ring",
+        "qos": "1",
+        "datatype": "json",
+        "broker": "hivemq",
+        "nl": false,
+        "rh": 0,
+        "rap": "true",
+        "inputs": 0,
+        "x": 140,
+        "y": 100,
+        "wires": [
+            [
+                "evenement"
+            ]
+        ]
+    },
+    {
+        "id": "state-in",
+        "type": "mqtt in",
+        "z": "tab-push",
+        "name": "état du portail",
+        "topic": "sesame/+/gate/state",
+        "qos": "1",
+        "datatype": "json",
+        "broker": "hivemq",
+        "nl": false,
+        "rh": 0,
+        "rap": "true",
+        "inputs": 0,
+        "x": 160,
+        "y": 180,
+        "wires": [
+            [
+                "evenement"
+            ]
+        ]
+    },
+    {
+        "id": "evenement",
+        "type": "debug",
+        "z": "tab-push",
+        "name": "évènement reçu",
+        "active": true,
+        "tosidebar": true,
+        "console": true,
+        "tostatus": true,
+        "complete": "true",
+        "targetType": "full",
+        "statusVal": "payload.state",
+        "statusType": "msg",
+        "x": 420,
+        "y": 140,
+        "wires": []
+    }
+]
