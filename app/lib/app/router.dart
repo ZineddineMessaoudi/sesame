@@ -2,10 +2,12 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../features/gate/views/gate_page.dart';
+import '../features/history/views/history_page.dart';
 
 /// Chemins centralisés : aucune chaîne de route en dur dans les vues.
 abstract final class AppRoutes {
   static const gate = '/';
+  static const history = '/historique';
 }
 
 /// Le routeur est un provider pour pouvoir, plus tard, rediriger selon
@@ -17,6 +19,10 @@ final routerProvider = Provider<GoRouter>((ref) {
       GoRoute(
         path: AppRoutes.gate,
         builder: (context, state) => const GatePage(),
+      ),
+      GoRoute(
+        path: AppRoutes.history,
+        builder: (context, state) => const HistoryPage(),
       ),
     ],
   );

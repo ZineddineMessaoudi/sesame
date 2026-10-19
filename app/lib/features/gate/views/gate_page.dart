@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 
+import '../../../app/router.dart';
 import '../../../core/connectivity/connection_notifier.dart';
 import '../../../core/connectivity/connectivity_banner.dart';
 import '../../doorbell/viewmodels/doorbell_view_model.dart';
@@ -23,7 +25,16 @@ class GatePage extends ConsumerWidget {
     final quality = ref.watch(connectionProvider);
     final ring = ref.watch(doorbellViewModelProvider);
     return Scaffold(
-      appBar: AppBar(title: const Text('Sésame')),
+      appBar: AppBar(
+        title: const Text('Sésame'),
+        actions: [
+          IconButton(
+            onPressed: () => context.push(AppRoutes.history),
+            icon: const Icon(Icons.history),
+            tooltip: 'Historique',
+          ),
+        ],
+      ),
       body: SafeArea(
         child: Column(
           children: [
