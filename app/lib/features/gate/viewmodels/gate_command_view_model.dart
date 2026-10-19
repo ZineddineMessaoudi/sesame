@@ -42,7 +42,17 @@ class CommandIdentityRefused extends CommandUiState {
 /// « Ouvert » lui-même ; seul `gate/state` (GateViewModel) fait foi.
 class GateCommandViewModel extends Notifier<CommandUiState> {
   @override
-  CommandUiState build() => const CommandIdle();
+  CommandUiState build() {
+    // Une commande rejouée par l'outbox n'a pas d'auteur devant l'écran :
+    // c'est ici qu'elle redevient visible, notamment « Expirée, non envoyée ».
+    final sub = ref.watch(outboxServiceProvider).results.listen((result) {
+      // Jamais par-dessus une commande en cours : l'utilisateur attend sa réponse.
+      if (isBusy) return;
+      state = CommandFinished(result.command.action, result.outcome);
+    });
+    ref.onDispose(sub.cancel);
+    return const CommandIdle();
+  }
 
   bool get isBusy => state is CommandAuthenticating || state is CommandSending;
 

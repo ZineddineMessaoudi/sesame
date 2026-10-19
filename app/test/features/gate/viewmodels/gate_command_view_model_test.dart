@@ -6,15 +6,19 @@ import 'package:mocktail/mocktail.dart';
 import 'package:sesame/features/auth/data/biometric_repository.dart';
 import 'package:sesame/features/gate/data/gate_repository.dart';
 import 'package:sesame/features/gate/data/models/gate_command.dart';
+import 'package:sesame/features/gate/data/outbox_service.dart';
 import 'package:sesame/features/gate/viewmodels/gate_command_view_model.dart';
 
 class MockGateRepository extends Mock implements GateRepository {}
 
 class MockBiometricRepository extends Mock implements BiometricRepository {}
 
+class MockOutboxService extends Mock implements OutboxService {}
+
 void main() {
   late MockGateRepository gate;
   late MockBiometricRepository biometric;
+  late MockOutboxService outbox;
   late ProviderContainer container;
   var ids = 0;
 
@@ -39,10 +43,14 @@ void main() {
         .thenAnswer((_) async => CommandOutcome.executed);
     when(() => biometric.confirm(any()))
         .thenAnswer((_) async => IdentityCheck.confirmed);
+    outbox = MockOutboxService();
+    when(() => outbox.results).thenAnswer((_) => const Stream.empty());
+    when(() => outbox.enqueue(any())).thenAnswer((_) async {});
     container = ProviderContainer(
       overrides: [
         gateRepositoryProvider.overrideWithValue(gate),
         biometricRepositoryProvider.overrideWithValue(biometric),
+        outboxServiceProvider.overrideWithValue(outbox),
       ],
     );
     addTearDown(container.dispose);
@@ -79,6 +87,26 @@ void main() {
     verifyNever(() => gate.newCommand(any()));
     verifyNever(() => gate.sendCommand(any()));
     expect(state(), isA<CommandIdentityRefused>());
+  });
+
+  test('hors ligne : la commande est mise en attente, pas perdue', () async {
+    when(() => gate.sendCommand(any()))
+        .thenAnswer((_) async => CommandOutcome.notSent);
+
+    await viewModel().request(GateAction.close);
+
+    // C'est bien la commande publiée qui est mise en file, avec son cmdId
+    // et son TTL d'origine : le renvoi ne repartira pas de zéro (§4).
+    final queued = verify(() => outbox.enqueue(captureAny())).captured.single;
+    expect((queued as GateCommand).cmdId, isNotEmpty);
+    expect(
+      state(),
+      isA<CommandFinished>().having(
+        (s) => s.outcome,
+        'outcome',
+        CommandOutcome.queued,
+      ),
+    );
   });
 
   test('fermer ne demande pas la biométrie', () async {
