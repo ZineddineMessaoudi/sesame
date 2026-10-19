@@ -34,6 +34,9 @@ constexpr uint32_t NTP_WAIT_MS = 10000;
 // tourne moins vite que le temps réel, l'horloge prend du retard et ferait rejeter les commandes
 // fraîches (issuedAt « dans le futur »). Sur un vrai ESP32, quelques minutes suffiraient.
 constexpr uint32_t NTP_SYNC_INTERVAL_MS = 15000;
+// Attente d'une resynchronisation déclenchée à la volée, quand une commande semble
+// venir du futur : assez pour un aller-retour NTP, très en deçà des 10 s d'ack.
+constexpr uint32_t NTP_RESYNC_WAIT_MS = 1200;
 
 // --- Commandes (§4) ---
 constexpr int64_t CMD_TTL_S = 60;           // durée de vie maximale d'une commande
@@ -105,6 +108,14 @@ void startNtp() {
   // UTC : les ts du contrat sont en epoch secondes UTC, sans fuseau.
   sntp_set_sync_interval(NTP_SYNC_INTERVAL_MS);
   configTime(0, 0, "pool.ntp.org", "time.google.com");  // relancé : resynchro immédiate
+}
+
+// Resynchronisation courte, déclenchée quand on soupçonne notre horloge d'être
+// en retard. Bloquante, mais brève : l'app attend l'ack 10 s (§4).
+void resyncClock() {
+  startNtp();
+  const uint32_t start = millis();
+  while (millis() - start < NTP_RESYNC_WAIT_MS) delay(50);
 }
 
 void syncClock() {
@@ -222,12 +233,26 @@ const char* evaluateCommand(const char* cmdId, int64_t issuedAt, int64_t expires
   if (isDuplicate(cmdId)) return "duplicate";
   // Refus par défaut : on n'ouvre jamais sans être sûr de l'heure.
   if (!timeIsSynced()) return "rejected_no_time";
-  const int64_t now = time(nullptr);
+
+  // Un TTL incohérent ou plus long que 60 s est refusé : il permettrait de rejouer
+  // l'ordre plus tard. Évalué avant toute resynchro, car il ne dépend pas de notre heure.
+  if (expiresAt <= issuedAt || expiresAt - issuedAt > CMD_TTL_S) return "rejected_expired";
+
+  int64_t now = time(nullptr);
+  // Une commande « venue du futur » accuse notre horloge, pas l'émetteur : dans
+  // Wokwi, une simulation mise en pause (onglet masqué) fige l'ESP32 pendant que
+  // le temps réel continue, et toute commande fraîche paraît alors anticipée. On
+  // resynchronise et on réévalue **une seule fois** : si c'est encore du futur
+  // après ça, on refuse pour de bon.
+  if (issuedAt > now + CLOCK_TOLERANCE_S) {
+    Serial.println("Commande datée du futur : resynchronisation avant de trancher");
+    resyncClock();
+    now = time(nullptr);
+  }
+
   const bool expired = now > expiresAt + CLOCK_TOLERANCE_S;
   const bool fromFuture = issuedAt > now + CLOCK_TOLERANCE_S;
-  // Un TTL incohérent ou plus long que 60 s est refusé : il permettrait de rejouer l'ordre plus tard.
-  const bool badTtl = expiresAt <= issuedAt || expiresAt - issuedAt > CMD_TTL_S;
-  if (expired || fromFuture || badTtl) return "rejected_expired";
+  if (expired || fromFuture) return "rejected_expired";
   return "accepted";
 }
 

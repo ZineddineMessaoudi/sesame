@@ -1,0 +1,61 @@
+# Backend Sésame (§9) : Node-RED relaie MQTT vers FCM et historise dans InfluxDB.
+#
+# Démarrage :  docker compose up -d      (depuis backend/)
+# Node-RED  :  http://localhost:1880
+# InfluxDB  :  http://localhost:8086
+#
+# Les secrets viennent de backend/.env (gitignoré), jamais du présent fichier.
+# Une seule instance Node-RED doit tourner à la fois : HiveMQ, InfluxDB et
+# Firebase sont partagés, deux instances écriraient les événements en double
+# et enverraient deux notifications (§13).
+
+services:
+  node-red:
+    image: nodered/node-red:4.1
+    container_name: sesame-node-red
+    restart: unless-stopped
+    ports:
+      - "1880:1880"
+    environment:
+      TZ: Europe/Paris
+      # Déchiffre flows_cred.json. Même valeur sur toutes les machines, sinon
+      # les identifiants enregistrés deviennent illisibles ailleurs (§13).
+      NODE_RED_CREDENTIAL_SECRET: ${NODE_RED_CREDENTIAL_SECRET}
+      # Injectés dans les nœuds via ${...} : aucun identifiant en clair ni
+      # chiffré dans flows.json, qui est versionné (§10).
+      MQTT_HOST: ${MQTT_HOST}
+      MQTT_PORT: ${MQTT_PORT}
+      MQTT_USERNAME: ${MQTT_USERNAME}
+      MQTT_PASSWORD: ${MQTT_PASSWORD}
+      INFLUXDB_ORG: ${INFLUXDB_ORG}
+      INFLUXDB_BUCKET: ${INFLUXDB_BUCKET}
+      INFLUXDB_TOKEN: ${INFLUXDB_TOKEN}
+    volumes:
+      # flows.json vit dans le dépôt : il est versionné et suit les machines.
+      - ./node-red:/data
+      # Clé de signature des jetons OAuth pour FCM HTTP v1. En lecture seule :
+      # Node-RED n'a aucune raison de la modifier.
+      - ./firebase-service-account.json:/data/firebase-service-account.json:ro
+    depends_on:
+      - influxdb
+
+  influxdb:
+    image: influxdb:2.7
+    container_name: sesame-influxdb
+    restart: unless-stopped
+    ports:
+      - "8086:8086"
+    environment:
+      # Initialisation au premier démarrage uniquement : si le volume existe
+      # déjà, ces variables sont ignorées.
+      DOCKER_INFLUXDB_INIT_MODE: setup
+      DOCKER_INFLUXDB_INIT_USERNAME: ${INFLUXDB_USERNAME}
+      DOCKER_INFLUXDB_INIT_PASSWORD: ${INFLUXDB_PASSWORD}
+      DOCKER_INFLUXDB_INIT_ORG: ${INFLUXDB_ORG}
+      DOCKER_INFLUXDB_INIT_BUCKET: ${INFLUXDB_BUCKET}
+      # Rétention 30 jours : minimisation RGPD (§9). Aucune image stockée.
+      DOCKER_INFLUXDB_INIT_RETENTION: ${INFLUXDB_RETENTION}
+      DOCKER_INFLUXDB_INIT_ADMIN_TOKEN: ${INFLUXDB_TOKEN}
+    volumes:
+      - ./data/influxdb:/var/lib/influxdb2
+      - ./data/influxdb-config:/etc/influxdb2

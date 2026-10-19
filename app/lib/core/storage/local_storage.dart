@@ -4,19 +4,28 @@ import 'package:hive_ce_flutter/hive_ce_flutter.dart';
 
 import '../../features/gate/data/models/gate_command.dart';
 import '../../features/gate/data/models/gate_snapshot.dart';
+import '../../features/history/data/models/gate_event.dart';
 import 'encryption_key_store.dart';
 import 'hive_registrar.g.dart';
 
 /// Boxes Hive chiffrées : la source de vérité locale de l'app (§5).
 /// Le réseau alimente le repository, qui écrit ici ; l'UI ne lit jamais le réseau.
 class LocalStorage {
-  const LocalStorage({required this.gateState, required this.outbox});
+  const LocalStorage({
+    required this.gateState,
+    required this.outbox,
+    required this.events,
+  });
 
   final Box<GateSnapshot> gateState;
 
   /// Commandes émises hors ligne, en attente d'une session MQTT (§5).
   /// Chiffrée comme les autres : un ordre d'ouverture ne traîne pas en clair.
   final Box<GateCommand> outbox;
+
+  /// Cache de l'historique (§5) : l'écran reste consultable hors ligne, avec
+  /// la dernière liste rapportée par l'API.
+  final Box<GateEvent> events;
 
   static Future<LocalStorage> open({EncryptionKeyStore? keyStore}) async {
     await Hive.initFlutter();
@@ -27,6 +36,7 @@ class LocalStorage {
     return LocalStorage(
       gateState: await _openBox<GateSnapshot>('gate_state', cipher),
       outbox: await _openBox<GateCommand>('outbox', cipher),
+      events: await _openBox<GateEvent>('events', cipher),
     );
   }
 

@@ -4,6 +4,12 @@ app/env.json
 **/GoogleService-Info.plist
 firmware/include/secrets.h
 backend/.env
+# Clé privée du compte de service Firebase, dont Node-RED se sert pour signer
+# les jetons OAuth de FCM HTTP v1. En clair dans le fichier : jamais versionnée.
+# Le second motif couvre le nom par défaut de la console Firebase, qu'on oublie
+# facilement de renommer (<projet>-firebase-adminsdk-<hash>.json).
+**/firebase-service-account*.json
+**/*firebase-adminsdk*.json
 
 # --- FVM ---
 .fvm/

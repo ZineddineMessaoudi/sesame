@@ -1,6 +1,7 @@
 import 'dart:io';
 import 'dart:ui';
 
+import 'package:firebase_core/firebase_core.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -25,8 +26,17 @@ Future<void> main() async {
     return false;
   };
 
-  // Validée avant tout le reste : sans config, inutile de démarrer (Firebase viendra ici).
+  // Validée avant tout le reste : sans config, inutile de démarrer.
   final config = AppConfig.fromEnvironment();
+
+  // Non bloquant volontairement : sans Firebase, l'app perd les push, mais
+  // l'état du portail, les commandes et l'outbox fonctionnent toujours. Mieux
+  // vaut une app dégradée qu'un écran noir si google-services.json manque.
+  try {
+    await Firebase.initializeApp();
+  } on Object catch (e) {
+    debugPrint('Firebase : initialisation impossible ($e) — push désactivé');
+  }
   // Boxes chiffrées ouvertes avant le premier écran : l'état en cache s'affiche tout de suite.
   final storage = await LocalStorage.open();
 

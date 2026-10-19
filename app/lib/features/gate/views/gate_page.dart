@@ -1,8 +1,12 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 
+import '../../../app/router.dart';
 import '../../../core/connectivity/connection_notifier.dart';
 import '../../../core/connectivity/connectivity_banner.dart';
+import '../../doorbell/viewmodels/doorbell_view_model.dart';
+import '../../doorbell/views/widgets/doorbell_alert.dart';
 
 import '../viewmodels/gate_command_view_model.dart';
 import '../viewmodels/gate_view_model.dart';
@@ -19,8 +23,18 @@ class GatePage extends ConsumerWidget {
     final commandState = ref.watch(gateCommandViewModelProvider);
     final commands = ref.read(gateCommandViewModelProvider.notifier);
     final quality = ref.watch(connectionProvider);
+    final ring = ref.watch(doorbellViewModelProvider);
     return Scaffold(
-      appBar: AppBar(title: const Text('Sésame')),
+      appBar: AppBar(
+        title: const Text('Sésame'),
+        actions: [
+          IconButton(
+            onPressed: () => context.push(AppRoutes.history),
+            icon: const Icon(Icons.history),
+            tooltip: 'Historique',
+          ),
+        ],
+      ),
       body: SafeArea(
         child: Column(
           children: [
@@ -35,6 +49,16 @@ class GatePage extends ConsumerWidget {
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.stretch,
                       children: [
+                        // En tête : une sonnerie est l'information la plus urgente.
+                        if (ring != null) ...[
+                          DoorbellAlert(
+                            ring: ring,
+                            onDismiss: ref
+                                .read(doorbellViewModelProvider.notifier)
+                                .acknowledge,
+                          ),
+                          const SizedBox(height: 16),
+                        ],
                         GateStatusCard(
                           gate: viewState.gate,
                           device: viewState.visibleDevice,
