@@ -13,5 +13,6 @@ fakeMqtt() {
   when(() => mqtt.messages).thenAnswer((_) => inbound.stream);
   when(() => mqtt.start()).thenAnswer((_) async {});
   when(() => mqtt.dispose()).thenAnswer((_) async {});
+  when(() => mqtt.publish(any(), any())).thenReturn(true);
   return (mqtt: mqtt, inbound: inbound);
 }

@@ -6,6 +6,8 @@
 	<true/>
 	<key>CFBundleDevelopmentRegion</key>
 	<string>$(DEVELOPMENT_LANGUAGE)</string>
+	<key>NSFaceIDUsageDescription</key>
+	<string>Face ID confirme votre identité avant d'ouvrir le portail.</string>
 	<key>CFBundleDisplayName</key>
 	<string>Sesame</string>
 	<key>CFBundleExecutable</key>

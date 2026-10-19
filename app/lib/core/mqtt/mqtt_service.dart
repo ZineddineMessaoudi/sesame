@@ -79,6 +79,24 @@ class MqttService {
     }
   }
 
+  /// Publie en QoS 1, sans retain. Renvoie `false` si la session n'est pas ouverte :
+  /// c'est à l'appelant de décider (afficher l'erreur, mettre en attente…), jamais
+  /// d'envoi différé caché ici.
+  bool publish(String topic, String payload) {
+    final client = _client;
+    if (client == null || _sessionState != MqttSessionState.connected) {
+      return false;
+    }
+    final data = MqttClientPayloadBuilder().addUTF8String(payload).payload!;
+    try {
+      client.publishMessage(topic, MqttQos.atLeastOnce, data);
+      return true;
+    } on Exception catch (e) {
+      debugPrint('MQTT : publication impossible ($e)');
+      return false;
+    }
+  }
+
   Future<void> dispose() async {
     stop();
     await _updatesSub?.cancel();

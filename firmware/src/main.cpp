@@ -7,6 +7,7 @@
 #include <PubSubClient.h>
 #include <WiFi.h>
 #include <WiFiClientSecure.h>
+#include <esp_sntp.h>
 #include <time.h>
 
 #include "secrets.h"
@@ -29,6 +30,15 @@ constexpr uint32_t STEP_INTERVAL_MS = 45;
 constexpr uint16_t MQTT_KEEPALIVE_S = 15;
 constexpr uint32_t MQTT_RETRY_MS = 5000;
 constexpr uint32_t NTP_WAIT_MS = 10000;
+// Resynchro NTP fréquente (15 s = minimum d'ESP-IDF, 1 h par défaut) : dans Wokwi la simulation
+// tourne moins vite que le temps réel, l'horloge prend du retard et ferait rejeter les commandes
+// fraîches (issuedAt « dans le futur »). Sur un vrai ESP32, quelques minutes suffiraient.
+constexpr uint32_t NTP_SYNC_INTERVAL_MS = 15000;
+
+// --- Commandes (§4) ---
+constexpr int64_t CMD_TTL_S = 60;           // durée de vie maximale d'une commande
+constexpr int64_t CLOCK_TOLERANCE_S = 5;    // écart d'horloge toléré téléphone / ESP32
+constexpr size_t DEDUP_SIZE = 16;           // nombre de cmdId acceptés mémorisés
 
 // --- Sonnette ---
 constexpr uint32_t DEBOUNCE_MS = 50;
@@ -39,6 +49,8 @@ const String TOPIC_BASE = String("sesame/") + SITE_ID;
 const String TOPIC_STATE = TOPIC_BASE + "/gate/state";
 const String TOPIC_STATUS = TOPIC_BASE + "/device/status";
 const String TOPIC_RING = TOPIC_BASE + "/doorbell/ring";
+const String TOPIC_CMD = TOPIC_BASE + "/gate/cmd";
+const String TOPIC_ACK = TOPIC_BASE + "/gate/ack";
 const String CLIENT_ID = String("sesame-esp32-") + SITE_ID;  // unique : le broker éjecte les doublons
 
 WiFiClientSecure tls;
@@ -59,6 +71,9 @@ int bellRawLevel = HIGH;      // dernière lecture brute (rebonds compris)
 int bellStableLevel = HIGH;   // niveau validé après DEBOUNCE_MS sans changement
 uint32_t bellChangedAt = 0;
 uint32_t lastRingAt = 0;
+// Tampon circulaire des derniers cmdId exécutés : QoS 1 peut livrer deux fois la même commande.
+char acceptedCmdIds[DEDUP_SIZE][37] = {};
+size_t nextDedupSlot = 0;
 
 const char* toString(GateState s) {
   switch (s) {
@@ -86,9 +101,14 @@ void connectWifi() {
   Serial.printf("\r\nWi-Fi : connecté, IP %s\r\n", WiFi.localIP().toString().c_str());
 }
 
-void syncClock() {
+void startNtp() {
   // UTC : les ts du contrat sont en epoch secondes UTC, sans fuseau.
-  configTime(0, 0, "pool.ntp.org", "time.google.com");
+  sntp_set_sync_interval(NTP_SYNC_INTERVAL_MS);
+  configTime(0, 0, "pool.ntp.org", "time.google.com");  // relancé : resynchro immédiate
+}
+
+void syncClock() {
+  startNtp();
   const uint32_t start = millis();
   while (!timeIsSynced() && millis() - start < NTP_WAIT_MS) delay(200);
   // Sans NTP on continue quand même : l'état reste publié, mais les commandes seront
@@ -170,6 +190,76 @@ void setGateState(GateState next) {
   statePending = true;
 }
 
+void publishAck(const char* cmdId, const char* result) {
+  JsonDocument doc;
+  doc["cmdId"] = cmdId;
+  doc["result"] = result;
+  doc["ts"] = timeIsSynced() ? static_cast<uint32_t>(time(nullptr)) : 0;
+  char payload[128];
+  serializeJson(doc, payload);
+  // QoS 0 : PubSubClient ne publie pas en QoS 1 (limite documentée dans l'ADR 0003).
+  // Si l'ack se perd, l'app affiche « Pas de réponse » ; l'état publié reste la vérité.
+  mqtt.publish(TOPIC_ACK.c_str(), payload, false);
+  Serial.printf("MQTT -> %s %s\r\n", TOPIC_ACK.c_str(), payload);
+}
+
+bool isDuplicate(const char* cmdId) {
+  for (const auto& id : acceptedCmdIds) {
+    if (strcmp(id, cmdId) == 0) return true;
+  }
+  return false;
+}
+
+void rememberCmdId(const char* cmdId) {
+  strlcpy(acceptedCmdIds[nextDedupSlot], cmdId, sizeof(acceptedCmdIds[0]));
+  nextDedupSlot = (nextDedupSlot + 1) % DEDUP_SIZE;
+}
+
+// Applique les règles du contrat dans l'ordre : doublon, heure, durée de vie.
+// Seules les commandes acceptées sont mémorisées : le doublon d'une commande refusée
+// est réévalué (et refusé à nouveau), jamais exécuté par erreur.
+const char* evaluateCommand(const char* cmdId, int64_t issuedAt, int64_t expiresAt) {
+  if (isDuplicate(cmdId)) return "duplicate";
+  // Refus par défaut : on n'ouvre jamais sans être sûr de l'heure.
+  if (!timeIsSynced()) return "rejected_no_time";
+  const int64_t now = time(nullptr);
+  const bool expired = now > expiresAt + CLOCK_TOLERANCE_S;
+  const bool fromFuture = issuedAt > now + CLOCK_TOLERANCE_S;
+  // Un TTL incohérent ou plus long que 60 s est refusé : il permettrait de rejouer l'ordre plus tard.
+  const bool badTtl = expiresAt <= issuedAt || expiresAt - issuedAt > CMD_TTL_S;
+  if (expired || fromFuture || badTtl) return "rejected_expired";
+  return "accepted";
+}
+
+void onMqttMessage(char* topic, byte* payload, unsigned int length) {
+  if (TOPIC_CMD != topic) return;
+  JsonDocument doc;
+  // Entrée const : ArduinoJson copie les chaînes, car le tampon de PubSubClient
+  // est réutilisé par publishAck() juste après.
+  if (deserializeJson(doc, static_cast<const byte*>(payload), length)) {
+    Serial.println("Commande : JSON invalide, ignorée");
+    return;
+  }
+  const char* cmdId = doc["cmdId"];
+  const char* action = doc["action"];
+  const bool valid = cmdId && strlen(cmdId) > 0 && strlen(cmdId) <= 36 && action &&
+                     doc["issuedAt"].is<int64_t>() && doc["expiresAt"].is<int64_t>();
+  // Commandes explicites uniquement : jamais de "toggle", qu'un doublon inverserait.
+  const bool open = valid && strcmp(action, "open") == 0;
+  const bool close = valid && strcmp(action, "close") == 0;
+  if (!open && !close) {
+    Serial.println("Commande : format inconnu, ignorée");
+    return;
+  }
+  const char* result = evaluateCommand(cmdId, doc["issuedAt"], doc["expiresAt"]);
+  Serial.printf("Commande %s (%s) : %s\r\n", action, cmdId, result);
+  if (strcmp(result, "accepted") == 0) {
+    rememberCmdId(cmdId);
+    targetAngle = open ? ANGLE_OPEN : ANGLE_CLOSED;  // driveGate() publiera opening/open
+  }
+  publishAck(cmdId, result);
+}
+
 void connectMqtt() {
   Serial.printf("MQTT : connexion à %s:%d\r\n", MQTT_HOST, MQTT_PORT);
   // LWT : si la connexion tombe sans déconnexion propre, le broker publie "offline" (retain).
@@ -181,7 +271,14 @@ void connectMqtt() {
     return;
   }
   Serial.println("MQTT : connecté");
+  // La poignée de main TLS est très lente à simuler : l'horloge a pris ~10 s de retard
+  // pendant la connexion (mesuré). On resynchronise sans attendre les 15 s.
+  startNtp();
   mqtt.publish(TOPIC_STATUS.c_str(), "online", true);
+  // Session propre (PubSubClient) : l'abonnement est refait à chaque connexion.
+  if (mqtt.subscribe(TOPIC_CMD.c_str(), 1)) {
+    Serial.printf("MQTT : abonné à %s\r\n", TOPIC_CMD.c_str());
+  }
   statePending = true;  // republie l'état : il a pu changer pendant la coupure
 }
 
@@ -228,6 +325,7 @@ void setup() {
   mqtt.setServer(MQTT_HOST, MQTT_PORT);
   mqtt.setKeepAlive(MQTT_KEEPALIVE_S);
   mqtt.setBufferSize(512);
+  mqtt.setCallback(onMqttMessage);
 }
 
 void loop() {
