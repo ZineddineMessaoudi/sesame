@@ -161,6 +161,32 @@ void main() {
       },
     );
 
+    test(
+      'confirmNow date le dernier état de maintenant, sans le changer',
+      () async {
+        state('open', 3);
+        await pumpEventQueue();
+        final later = now.add(const Duration(minutes: 10));
+        final confirming = GateRepository(
+          mqtt,
+          topics,
+          cache,
+          clock: () => later,
+        );
+        addTearDown(confirming.dispose);
+
+        final confirmed = confirming.confirmNow();
+
+        expect(confirmed?.state.status, GateStatus.open);
+        expect(confirmed?.receivedAt, later);
+        expect(confirming.lastKnown?.receivedAt, later); // persisté dans Hive
+      },
+    );
+
+    test('confirmNow sans état connu ne fait rien', () {
+      expect(repository.confirmNow(), isNull);
+    });
+
     test('un doublon ignoré n\'écrase pas le cache', () async {
       state('open', 5);
       state('closed', 2); // en retard : ignoré

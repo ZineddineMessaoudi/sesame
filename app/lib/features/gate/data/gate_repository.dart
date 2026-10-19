@@ -76,6 +76,18 @@ class GateRepository {
   GateSnapshot? get lastKnown => _cache.get(_cacheKey);
 
   Stream<GateSnapshot> watchGateState() => _gateStates.stream;
+
+  /// On perd le direct (réseau, broker ou ESP32) : l'état en cache était encore
+  /// juste à cet instant. On le date de maintenant, pour que « Mis à jour il y a … »
+  /// compte depuis la dernière confirmation et non depuis le dernier changement.
+  GateSnapshot? confirmNow() {
+    final current = lastKnown;
+    if (current == null) return null;
+    final confirmed = GateSnapshot(state: current.state, receivedAt: _clock());
+    unawaited(_cache.put(_cacheKey, confirmed));
+    return confirmed;
+  }
+
   Stream<DeviceStatus> watchDeviceStatus() => _deviceStatuses.stream;
 
   /// Démarre la connexion MQTT (idempotent) : les valeurs retenues arrivent ensuite.

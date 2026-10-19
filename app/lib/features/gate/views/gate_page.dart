@@ -37,7 +37,9 @@ class GatePage extends ConsumerWidget {
                       children: [
                         GateStatusCard(
                           gate: viewState.gate,
-                          device: viewState.device,
+                          device: viewState.visibleDevice,
+                          isLive: viewState.isLive,
+                          confirmedAt: viewState.confirmedAt,
                         ),
                         const SizedBox(height: 24),
                         GateCommandPanel(
