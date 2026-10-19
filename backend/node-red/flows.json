@@ -46,7 +46,8 @@
         "y": 100,
         "wires": [
             [
-                "prep-notif"
+                "prep-notif",
+                "influx-prep"
             ]
         ]
     },
@@ -67,7 +68,8 @@
         "y": 320,
         "wires": [
             [
-                "evenement"
+                "evenement",
+                "influx-prep"
             ]
         ]
     },
@@ -194,6 +196,159 @@
         "statusType": "msg",
         "x": 580,
         "y": 250,
+        "wires": []
+    },
+    {
+        "id": "influx-prep",
+        "type": "function",
+        "z": "tab-push",
+        "name": "line protocol InfluxDB",
+        "func": "// Measurement gate_events, tags siteId et type (§9).\nconst parts = (msg.topic || '').split('/');\nconst siteId = parts[1];\nconst kind = parts[3]; // 'ring' ou 'state'\nif (!siteId || !msg.payload) { return null; }\n\nconst esc = (s) => String(s).replace(/[\"\\\\]/g, '\\\\$&');\n\nlet type, fields;\nif (kind === 'ring' && msg.payload.ringId) {\n    type = 'ring';\n    fields = 'ringId=\"' + esc(msg.payload.ringId) + '\"';\n} else if (kind === 'state' && msg.payload.state) {\n    type = 'state';\n    fields = 'state=\"' + esc(msg.payload.state) + '\",seq=' + (parseInt(msg.payload.seq, 10) || 0) + 'i';\n} else {\n    node.warn('Évènement non historisé : ' + msg.topic);\n    return null;\n}\n\n// ts vaut 0 tant que l'ESP32 n'a pas l'heure NTP : on date alors de la\n// réception, sinon la mesure atterrirait en 1970 et fausserait l'historique.\nconst seconds = Number(msg.payload.ts) || 0;\nconst ns = seconds > 0\n    ? BigInt(seconds) * 1000000000n\n    : BigInt(Date.now()) * 1000000n;\n\n// Jeton et bucket lus dans l'environnement : aucun secret dans flows.json (§10).\nmsg.url = 'http://influxdb:8086/api/v2/write'\n    + '?org=' + encodeURIComponent(env.get('INFLUXDB_ORG'))\n    + '&bucket=' + encodeURIComponent(env.get('INFLUXDB_BUCKET'))\n    + '&precision=ns';\nmsg.headers = {\n    authorization: 'Token ' + env.get('INFLUXDB_TOKEN'),\n    'content-type': 'text/plain; charset=utf-8'\n};\nmsg.payload = 'gate_events,siteId=' + siteId + ',type=' + type + ' ' + fields + ' ' + ns.toString();\nreturn msg;\n",
+        "outputs": 1,
+        "timeout": 0,
+        "noerr": 0,
+        "initialize": "",
+        "finalize": "",
+        "libs": [],
+        "x": 380,
+        "y": 400,
+        "wires": [
+            [
+                "influx-write"
+            ]
+        ]
+    },
+    {
+        "id": "influx-write",
+        "type": "http request",
+        "z": "tab-push",
+        "name": "écrit dans InfluxDB",
+        "method": "POST",
+        "ret": "txt",
+        "paytoqs": "ignore",
+        "url": "",
+        "tls": "",
+        "persist": false,
+        "proxy": "",
+        "insecureHTTPParser": false,
+        "authType": "",
+        "senderr": false,
+        "headers": [],
+        "x": 640,
+        "y": 400,
+        "wires": [
+            [
+                "influx-result"
+            ]
+        ]
+    },
+    {
+        "id": "influx-result",
+        "type": "debug",
+        "z": "tab-push",
+        "name": "écriture InfluxDB",
+        "active": true,
+        "tosidebar": true,
+        "console": true,
+        "tostatus": true,
+        "complete": "statusCode",
+        "targetType": "msg",
+        "statusVal": "statusCode",
+        "statusType": "msg",
+        "x": 900,
+        "y": 400,
+        "wires": []
+    },
+    {
+        "id": "api-in",
+        "type": "http in",
+        "z": "tab-push",
+        "name": "GET /api/events",
+        "url": "/api/events",
+        "method": "get",
+        "upload": false,
+        "swaggerDoc": "",
+        "x": 150,
+        "y": 500,
+        "wires": [
+            [
+                "api-query"
+            ]
+        ]
+    },
+    {
+        "id": "api-query",
+        "type": "function",
+        "z": "tab-push",
+        "name": "construit la requête Flux",
+        "func": "// from/to sont interpolés dans du Flux : on n'accepte qu'une durée\n// relative (-24h) ou un instant RFC3339, jamais du texte libre. Sans ce\n// filtre, un paramètre d'URL pourrait injecter du code Flux.\nconst SAFE = /^(-\\d+[smhdw]|\\d{4}-\\d{2}-\\d{2}T[0-9:.]+Z)$/;\nconst q = (msg.req && msg.req.query) || {};\nconst from = SAFE.test(q.from || '') ? q.from : '-7d';\nconst to = SAFE.test(q.to || '') ? q.to : 'now()';\nconst stop = to === 'now()' ? 'now()' : to;\n\nmsg.flux = 'from(bucket:\"' + env.get('INFLUXDB_BUCKET') + '\")'\n    + ' |> range(start:' + from + ', stop:' + stop + ')'\n    + ' |> filter(fn:(r) => r._measurement == \"gate_events\")'\n    + ' |> pivot(rowKey:[\"_time\"], columnKey:[\"_field\"], valueColumn:\"_value\")'\n    + ' |> sort(columns:[\"_time\"], desc:true)'\n    + ' |> limit(n:200)';\n\nmsg.url = 'http://influxdb:8086/api/v2/query?org=' + encodeURIComponent(env.get('INFLUXDB_ORG'));\nmsg.headers = {\n    authorization: 'Token ' + env.get('INFLUXDB_TOKEN'),\n    'content-type': 'application/vnd.flux',\n    accept: 'application/csv'\n};\nmsg.payload = msg.flux;\nreturn msg;\n",
+        "outputs": 1,
+        "timeout": 0,
+        "noerr": 0,
+        "initialize": "",
+        "finalize": "",
+        "libs": [],
+        "x": 390,
+        "y": 500,
+        "wires": [
+            [
+                "api-influx"
+            ]
+        ]
+    },
+    {
+        "id": "api-influx",
+        "type": "http request",
+        "z": "tab-push",
+        "name": "interroge InfluxDB",
+        "method": "POST",
+        "ret": "txt",
+        "paytoqs": "ignore",
+        "url": "",
+        "tls": "",
+        "persist": false,
+        "proxy": "",
+        "insecureHTTPParser": false,
+        "authType": "",
+        "senderr": false,
+        "headers": [],
+        "x": 640,
+        "y": 500,
+        "wires": [
+            [
+                "api-format"
+            ]
+        ]
+    },
+    {
+        "id": "api-format",
+        "type": "function",
+        "z": "tab-push",
+        "name": "CSV annoté -> JSON",
+        "func": "// InfluxDB 2.x ne répond qu'en CSV annoté pour les requêtes Flux : les\n// lignes '#' sont des métadonnées, et chaque table réémet son en-tête.\nconst rows = [];\nlet header = null;\nfor (const line of String(msg.payload).split('\\n')) {\n    const l = line.trim();\n    if (!l || l.startsWith('#')) continue;\n    const cells = l.split(',');\n    if (cells[1] === 'result' && cells[2] === 'table') { header = cells; continue; }\n    if (!header) continue;\n    const row = {};\n    header.forEach((name, i) => {\n        if (name && name !== 'result' && name !== 'table') row[name] = cells[i];\n    });\n    rows.push(row);\n}\n\nconst events = rows.filter((r) => r._time).map((r) => {\n    const e = { ts: r._time, type: r.type, siteId: r.siteId };\n    if (r.ringId) e.ringId = r.ringId;\n    if (r.state) e.state = r.state;\n    if (r.seq) e.seq = Number(r.seq);\n    return e;\n});\n\nmsg.statusCode = 200;\nmsg.headers = {\n    'content-type': 'application/json; charset=utf-8',\n    // CORS : permet de tester l'API depuis un navigateur (§9).\n    'access-control-allow-origin': '*'\n};\nmsg.payload = { count: events.length, events: events };\nreturn msg;\n",
+        "outputs": 1,
+        "timeout": 0,
+        "noerr": 0,
+        "initialize": "",
+        "finalize": "",
+        "libs": [],
+        "x": 880,
+        "y": 500,
+        "wires": [
+            [
+                "api-out"
+            ]
+        ]
+    },
+    {
+        "id": "api-out",
+        "type": "http response",
+        "z": "tab-push",
+        "name": "réponse",
+        "statusCode": "",
+        "headers": {},
+        "x": 1100,
+        "y": 500,
         "wires": []
     },
     {
