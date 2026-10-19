@@ -12,7 +12,7 @@
 #include "secrets.h"
 
 // --- Broches (uniquement des broches "safe", §8) ---
-constexpr uint8_t PIN_DOORBELL = 13;  // bouton poussoir (câblé, utilisé au prochain checkpoint)
+constexpr uint8_t PIN_DOORBELL = 13;  // bouton poussoir : sonnette
 constexpr uint8_t PIN_MANUAL = 14;    // interrupteur à glissière : ouverture manuelle forcée
 constexpr uint8_t PIN_SERVO = 18;     // moteur du portail
 constexpr uint8_t PIN_LED = 25;       // voyant de statut
@@ -30,9 +30,15 @@ constexpr uint16_t MQTT_KEEPALIVE_S = 15;
 constexpr uint32_t MQTT_RETRY_MS = 5000;
 constexpr uint32_t NTP_WAIT_MS = 10000;
 
+// --- Sonnette ---
+constexpr uint32_t DEBOUNCE_MS = 50;
+// Anti-spam : un visiteur qui insiste ne doit pas déclencher une rafale de notifications push.
+constexpr uint32_t RING_COOLDOWN_MS = 3000;
+
 const String TOPIC_BASE = String("sesame/") + SITE_ID;
 const String TOPIC_STATE = TOPIC_BASE + "/gate/state";
 const String TOPIC_STATUS = TOPIC_BASE + "/device/status";
+const String TOPIC_RING = TOPIC_BASE + "/doorbell/ring";
 const String CLIENT_ID = String("sesame-esp32-") + SITE_ID;  // unique : le broker éjecte les doublons
 
 WiFiClientSecure tls;
@@ -49,6 +55,10 @@ uint32_t lastMqttAttemptAt = 0;
 uint32_t seq = 0;  // monotone pendant une session (repart à 0 au redémarrage, cf. app étape 3)
 bool statePending = true;  // état à (re)publier : au démarrage et après chaque reconnexion
 int lastManualLevel = HIGH;
+int bellRawLevel = HIGH;      // dernière lecture brute (rebonds compris)
+int bellStableLevel = HIGH;   // niveau validé après DEBOUNCE_MS sans changement
+uint32_t bellChangedAt = 0;
+uint32_t lastRingAt = 0;
 
 const char* toString(GateState s) {
   switch (s) {
@@ -98,6 +108,60 @@ void publishState() {
     statePending = false;
     Serial.printf("MQTT -> %s %s\r\n", TOPIC_STATE.c_str(), payload);
   }
+}
+
+// UUID v4 (RFC 4122) tiré du générateur matériel de l'ESP32 : identifiant unique de la sonnerie,
+// qui permet à Node-RED et à l'app de dédupliquer un message reçu deux fois.
+void makeUuid(char out[37]) {
+  uint8_t b[16];
+  for (int i = 0; i < 16; i += 4) {
+    const uint32_t r = esp_random();
+    memcpy(b + i, &r, 4);
+  }
+  b[6] = (b[6] & 0x0F) | 0x40;  // version 4
+  b[8] = (b[8] & 0x3F) | 0x80;  // variante RFC 4122
+  snprintf(out, 37, "%02x%02x%02x%02x-%02x%02x-%02x%02x-%02x%02x-%02x%02x%02x%02x%02x%02x",
+           b[0], b[1], b[2], b[3], b[4], b[5], b[6], b[7], b[8], b[9], b[10], b[11], b[12],
+           b[13], b[14], b[15]);
+}
+
+void publishRing() {
+  // Pas de mise en file hors ligne : une sonnerie relayée plusieurs minutes plus tard
+  // ferait croire qu'un visiteur attend encore. Elle est perdue, et c'est voulu.
+  if (!mqtt.connected()) {
+    Serial.println("Sonnette : MQTT déconnecté, sonnerie ignorée");
+    return;
+  }
+  char ringId[37];
+  makeUuid(ringId);
+  JsonDocument doc;
+  doc["ringId"] = ringId;
+  doc["ts"] = timeIsSynced() ? static_cast<uint32_t>(time(nullptr)) : 0;
+  char payload[96];
+  serializeJson(doc, payload);
+  // Pas de retain : un événement ponctuel ne doit pas être rejoué à chaque nouvel abonné.
+  if (mqtt.publish(TOPIC_RING.c_str(), payload, false)) {
+    Serial.printf("MQTT -> %s %s\r\n", TOPIC_RING.c_str(), payload);
+  }
+}
+
+void handleDoorbell() {
+  // Anti-rebond logiciel non bloquant : on n'accepte un niveau que s'il est stable.
+  const int level = digitalRead(PIN_DOORBELL);
+  if (level != bellRawLevel) {
+    bellRawLevel = level;
+    bellChangedAt = millis();
+    return;
+  }
+  if (millis() - bellChangedAt < DEBOUNCE_MS || level == bellStableLevel) return;
+  bellStableLevel = level;
+  if (level != LOW) return;  // on sonne à l'appui (front descendant), pas au relâchement
+  if (lastRingAt != 0 && millis() - lastRingAt < RING_COOLDOWN_MS) {
+    Serial.println("Sonnette : appui ignoré (anti-spam)");
+    return;
+  }
+  lastRingAt = millis();
+  publishRing();
 }
 
 void setGateState(GateState next) {
@@ -173,6 +237,7 @@ void loop() {
   }
   mqtt.loop();
 
+  handleDoorbell();
   handleManualSwitch();
   driveGate();
   if (statePending && mqtt.connected()) publishState();
