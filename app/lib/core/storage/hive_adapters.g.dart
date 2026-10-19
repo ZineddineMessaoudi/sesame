@@ -207,3 +207,86 @@ class GateCommandAdapter extends TypeAdapter<GateCommand> {
           runtimeType == other.runtimeType &&
           typeId == other.typeId;
 }
+
+class GateEventTypeAdapter extends TypeAdapter<GateEventType> {
+  @override
+  final typeId = 5;
+
+  @override
+  GateEventType read(BinaryReader reader) {
+    switch (reader.readByte()) {
+      case 0:
+        return GateEventType.ring;
+      case 1:
+        return GateEventType.state;
+      default:
+        return GateEventType.ring;
+    }
+  }
+
+  @override
+  void write(BinaryWriter writer, GateEventType obj) {
+    switch (obj) {
+      case GateEventType.ring:
+        writer.writeByte(0);
+      case GateEventType.state:
+        writer.writeByte(1);
+    }
+  }
+
+  @override
+  int get hashCode => typeId.hashCode;
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is GateEventTypeAdapter &&
+          runtimeType == other.runtimeType &&
+          typeId == other.typeId;
+}
+
+class GateEventAdapter extends TypeAdapter<GateEvent> {
+  @override
+  final typeId = 6;
+
+  @override
+  GateEvent read(BinaryReader reader) {
+    final numOfFields = reader.readByte();
+    final fields = <int, dynamic>{
+      for (int i = 0; i < numOfFields; i++) reader.readByte(): reader.read(),
+    };
+    return GateEvent(
+      ts: fields[0] as DateTime,
+      type: fields[1] as GateEventType,
+      status: fields[2] as GateStatus?,
+      ringId: fields[3] as String?,
+      seq: (fields[4] as num?)?.toInt(),
+    );
+  }
+
+  @override
+  void write(BinaryWriter writer, GateEvent obj) {
+    writer
+      ..writeByte(5)
+      ..writeByte(0)
+      ..write(obj.ts)
+      ..writeByte(1)
+      ..write(obj.type)
+      ..writeByte(2)
+      ..write(obj.status)
+      ..writeByte(3)
+      ..write(obj.ringId)
+      ..writeByte(4)
+      ..write(obj.seq);
+  }
+
+  @override
+  int get hashCode => typeId.hashCode;
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is GateEventAdapter &&
+          runtimeType == other.runtimeType &&
+          typeId == other.typeId;
+}

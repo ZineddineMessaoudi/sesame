@@ -9,6 +9,8 @@ extension HiveRegistrar on HiveInterface {
   void registerAdapters() {
     registerAdapter(GateActionAdapter());
     registerAdapter(GateCommandAdapter());
+    registerAdapter(GateEventAdapter());
+    registerAdapter(GateEventTypeAdapter());
     registerAdapter(GateSnapshotAdapter());
     registerAdapter(GateStateAdapter());
     registerAdapter(GateStatusAdapter());
@@ -19,6 +21,8 @@ extension IsolatedHiveRegistrar on IsolatedHiveInterface {
   void registerAdapters() {
     registerAdapter(GateActionAdapter());
     registerAdapter(GateCommandAdapter());
+    registerAdapter(GateEventAdapter());
+    registerAdapter(GateEventTypeAdapter());
     registerAdapter(GateSnapshotAdapter());
     registerAdapter(GateStateAdapter());
     registerAdapter(GateStatusAdapter());
