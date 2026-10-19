@@ -1,4 +1,7 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
+    <!-- Notification de sonnerie. Depuis Android 13 (API 33) elle doit aussi
+         être accordée à l'exécution, pas seulement déclarée ici. -->
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS"/>
     <application
         android:label="sesame"
         android:name="${applicationName}"
