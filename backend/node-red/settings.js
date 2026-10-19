@@ -544,7 +544,12 @@ module.exports = {
      *    global.get("os")
      */
     functionGlobalContext: {
-        // os:require('os'),
+        // Modules intégrés à Node.js, exposés aux nœuds function pour signer
+        // les jetons OAuth de FCM HTTP v1 (§9). On évite ainsi un module npm à
+        // installer dans le conteneur : un point de fragilité de moins, et un
+        // démarrage qui ne dépend pas du réseau.
+        crypto: require('crypto'),
+        fs: require('fs'),
     },
 
     /** The maximum number of messages nodes will buffer internally as part of their

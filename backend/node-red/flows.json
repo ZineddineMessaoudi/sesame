@@ -42,11 +42,11 @@
         "rh": 0,
         "rap": "true",
         "inputs": 0,
-        "x": 140,
+        "x": 130,
         "y": 100,
         "wires": [
             [
-                "evenement"
+                "prep-notif"
             ]
         ]
     },
@@ -63,8 +63,8 @@
         "rh": 0,
         "rap": "true",
         "inputs": 0,
-        "x": 160,
-        "y": 180,
+        "x": 150,
+        "y": 320,
         "wires": [
             [
                 "evenement"
@@ -72,10 +72,135 @@
         ]
     },
     {
+        "id": "prep-notif",
+        "type": "function",
+        "z": "tab-push",
+        "name": "prépare la notification",
+        "func": "// Le topic porte le siteId : sesame/{siteId}/doorbell/ring (§4).\nconst siteId = (msg.topic || '').split('/')[1];\nif (!siteId || !msg.payload || !msg.payload.ringId) {\n    node.warn('Sonnerie ignorée : topic ou payload invalide');\n    return null;\n}\n\nmsg.sesame = {\n    siteId: siteId,\n    title: 'Quelqu\\'un sonne',\n    body: 'Appui sur la sonnette du portail.'\n};\nnode.status({ fill: 'blue', shape: 'dot', text: msg.payload.ringId });\nreturn msg;\n",
+        "outputs": 1,
+        "timeout": 0,
+        "noerr": 0,
+        "initialize": "",
+        "finalize": "",
+        "libs": [],
+        "x": 360,
+        "y": 100,
+        "wires": [
+            [
+                "oauth-jwt"
+            ]
+        ]
+    },
+    {
+        "id": "oauth-jwt",
+        "type": "function",
+        "z": "tab-push",
+        "name": "signe le JWT du compte de service",
+        "func": "const crypto = global.get('crypto');\nconst fs = global.get('fs');\n\nconst KEY_FILE = '/data/firebase-service-account.json';\nconst AUD = 'https://oauth2.googleapis.com/token';\nconst SCOPE = 'https://www.googleapis.com/auth/firebase.messaging';\n\nlet key;\ntry {\n    key = JSON.parse(fs.readFileSync(KEY_FILE, 'utf8'));\n} catch (e) {\n    node.error('Clé de compte de service illisible : ' + e.message, msg);\n    return null;\n}\n\n// project_id vient du fichier de clé : une variable d'environnement de moins\n// à tenir à jour, et aucun risque de désaccord entre les deux.\nmsg.sesame.projectId = key.project_id;\n\nconst b64 = (o) => Buffer.from(JSON.stringify(o)).toString('base64url');\nconst now = Math.floor(Date.now() / 1000);\nconst unsigned = b64({ alg: 'RS256', typ: 'JWT' }) + '.' + b64({\n    iss: key.client_email,\n    scope: SCOPE,\n    aud: AUD,\n    iat: now,\n    exp: now + 3600\n});\nconst signature = crypto.createSign('RSA-SHA256')\n    .update(unsigned)\n    .sign(key.private_key, 'base64url');\n\n// Un jeton neuf à chaque sonnerie : on sonne rarement, et gérer un cache avec\n// son expiration coûterait plus en complexité que l'échange lui-même.\nmsg.url = AUD;\nmsg.headers = { 'content-type': 'application/x-www-form-urlencoded' };\nmsg.payload = new URLSearchParams({\n    grant_type: 'urn:ietf:params:oauth:grant-type:jwt-bearer',\n    assertion: unsigned + '.' + signature\n}).toString();\nreturn msg;\n",
+        "outputs": 1,
+        "timeout": 0,
+        "noerr": 0,
+        "initialize": "",
+        "finalize": "",
+        "libs": [],
+        "x": 640,
+        "y": 100,
+        "wires": [
+            [
+                "oauth-req"
+            ]
+        ]
+    },
+    {
+        "id": "oauth-req",
+        "type": "http request",
+        "z": "tab-push",
+        "name": "échange contre un jeton OAuth",
+        "method": "POST",
+        "ret": "obj",
+        "paytoqs": "ignore",
+        "url": "",
+        "tls": "",
+        "persist": false,
+        "proxy": "",
+        "insecureHTTPParser": false,
+        "authType": "",
+        "senderr": false,
+        "headers": [],
+        "x": 330,
+        "y": 180,
+        "wires": [
+            [
+                "fcm-build"
+            ]
+        ]
+    },
+    {
+        "id": "fcm-build",
+        "type": "function",
+        "z": "tab-push",
+        "name": "construit le message FCM",
+        "func": "const token = msg.payload && msg.payload.access_token;\nif (!token) {\n    node.error('Jeton OAuth absent : ' + JSON.stringify(msg.payload).slice(0, 300), msg);\n    return null;\n}\n\nmsg.url = 'https://fcm.googleapis.com/v1/projects/' + msg.sesame.projectId + '/messages:send';\nmsg.headers = {\n    'content-type': 'application/json',\n    authorization: 'Bearer ' + token\n};\nmsg.payload = {\n    message: {\n        // Topic FCM = siteId opaque : aucun identifiant utilisateur dans le\n        // routage des messages (§10).\n        topic: msg.sesame.siteId,\n        // Bloc `notification` : Android l'affiche lui-même, app fermée, sans\n        // avoir à réveiller notre code.\n        notification: { title: msg.sesame.title, body: msg.sesame.body },\n        android: { priority: 'HIGH' }\n    }\n};\nreturn msg;\n",
+        "outputs": 1,
+        "timeout": 0,
+        "noerr": 0,
+        "initialize": "",
+        "finalize": "",
+        "libs": [],
+        "x": 650,
+        "y": 180,
+        "wires": [
+            [
+                "fcm-req"
+            ]
+        ]
+    },
+    {
+        "id": "fcm-req",
+        "type": "http request",
+        "z": "tab-push",
+        "name": "envoie à FCM",
+        "method": "POST",
+        "ret": "obj",
+        "paytoqs": "ignore",
+        "url": "",
+        "tls": "",
+        "persist": false,
+        "proxy": "",
+        "insecureHTTPParser": false,
+        "authType": "",
+        "senderr": false,
+        "headers": [],
+        "x": 330,
+        "y": 250,
+        "wires": [
+            [
+                "fcm-result"
+            ]
+        ]
+    },
+    {
+        "id": "fcm-result",
+        "type": "debug",
+        "z": "tab-push",
+        "name": "réponse FCM",
+        "active": true,
+        "tosidebar": true,
+        "console": true,
+        "tostatus": true,
+        "complete": "payload",
+        "targetType": "msg",
+        "statusVal": "statusCode",
+        "statusType": "msg",
+        "x": 580,
+        "y": 250,
+        "wires": []
+    },
+    {
         "id": "evenement",
         "type": "debug",
         "z": "tab-push",
-        "name": "évènement reçu",
+        "name": "état reçu",
         "active": true,
         "tosidebar": true,
         "console": true,
@@ -84,8 +209,8 @@
         "targetType": "full",
         "statusVal": "payload.state",
         "statusType": "msg",
-        "x": 420,
-        "y": 140,
+        "x": 400,
+        "y": 320,
         "wires": []
     }
 ]

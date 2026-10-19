@@ -41,12 +41,27 @@ class LocalNotificationService implements NotificationService {
       ),
     );
 
-    // Android 13+ : la permission se demande à l'exécution.
-    await _plugin
+    final android = _plugin
         .resolvePlatformSpecificImplementation<
           AndroidFlutterLocalNotificationsPlugin
-        >()
-        ?.requestNotificationsPermission();
+        >();
+
+    // Créé explicitement, et non à la première notification locale : FCM doit
+    // pouvoir y router ses pushs dès le premier démarrage (le manifeste le
+    // désigne comme canal par défaut). Sans lui, Android retombe sur
+    // `fcm_fallback_notification_channel`, en importance DEFAULT — la
+    // notification ne s'afficherait pas en bandeau par-dessus l'écran.
+    await android?.createNotificationChannel(
+      const AndroidNotificationChannel(
+        _channelId,
+        'Sonnette',
+        description: 'Quelqu\'un sonne au portail',
+        importance: Importance.max,
+      ),
+    );
+
+    // Android 13+ : la permission se demande à l'exécution.
+    await android?.requestNotificationsPermission();
     await _plugin
         .resolvePlatformSpecificImplementation<
           IOSFlutterLocalNotificationsPlugin
