@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../auth/data/biometric_repository.dart';
 import '../data/gate_repository.dart';
 import '../data/models/gate_command.dart';
+import '../data/outbox_service.dart';
 
 /// Étapes d'une commande vues par l'écran. `sealed` : la View doit traiter tous les cas.
 sealed class CommandUiState {
@@ -66,7 +67,16 @@ class GateCommandViewModel extends Notifier<CommandUiState> {
     // Créée après la biométrie : le TTL de 60 s part de la confirmation, pas de l'appui.
     final command = repository.newCommand(action);
     state = CommandSending(action);
-    final outcome = await repository.sendCommand(command);
+    var outcome = await repository.sendCommand(command);
+
+    // Hors ligne : la commande est mise en attente plutôt que perdue (§5).
+    // Elle garde son cmdId et son TTL : si le réseau tarde, elle expirera
+    // sans jamais partir, ce qui est le comportement voulu.
+    if (outcome == CommandOutcome.notSent) {
+      await ref.read(outboxServiceProvider).enqueue(command);
+      outcome = CommandOutcome.queued;
+    }
+
     if (!ref.mounted) return;
     state = CommandFinished(action, outcome);
   }

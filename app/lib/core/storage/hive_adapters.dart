@@ -1,5 +1,6 @@
 import 'package:hive_ce/hive_ce.dart';
 
+import '../../features/gate/data/models/gate_command.dart';
 import '../../features/gate/data/models/gate_snapshot.dart';
 import '../../features/gate/data/models/gate_state.dart';
 
@@ -12,6 +13,9 @@ part 'hive_adapters.g.dart';
   AdapterSpec<GateStatus>(),
   AdapterSpec<GateState>(),
   AdapterSpec<GateSnapshot>(),
+  // Ajoutés pour l'outbox : une commande en attente survit à la fermeture de l'app.
+  AdapterSpec<GateAction>(),
+  AdapterSpec<GateCommand>(),
 ])
 // ignore: unused_element
 void _hiveAdapters() {}

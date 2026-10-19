@@ -5,6 +5,7 @@ import 'package:sesame/core/config/app_config.dart';
 import 'package:sesame/core/connectivity/network_monitor.dart';
 import 'package:sesame/core/mqtt/mqtt_service.dart';
 import 'package:sesame/core/storage/local_storage.dart';
+import 'package:sesame/features/gate/data/models/gate_command.dart';
 import 'package:sesame/features/gate/data/models/gate_snapshot.dart';
 
 import 'helpers/fake_mqtt.dart';
@@ -22,8 +23,9 @@ void main() {
       apiBaseUrl: Uri.parse('http://localhost:1880'),
     );
 
-    // Box ouverte hors de la zone de test « fake async » de testWidgets (accès disque réel).
+    // Boxes ouvertes hors de la zone de test « fake async » de testWidgets (accès disque réel).
     final box = (await tester.runAsync(openTestBox<GateSnapshot>))!;
+    final outbox = (await tester.runAsync(openTestBox<GateCommand>))!;
 
     await tester.pumpWidget(
       ProviderScope(
@@ -31,7 +33,9 @@ void main() {
           appConfigProvider.overrideWithValue(config),
           // Pas de vraie connexion au broker dans un test.
           mqttServiceProvider.overrideWithValue(fakeMqtt().mqtt),
-          localStorageProvider.overrideWithValue(LocalStorage(gateState: box)),
+          localStorageProvider.overrideWithValue(
+            LocalStorage(gateState: box, outbox: outbox),
+          ),
           networkMonitorProvider.overrideWithValue(FakeNetworkMonitor()),
         ],
         child: const SesameApp(),

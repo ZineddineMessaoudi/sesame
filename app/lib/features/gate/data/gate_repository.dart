@@ -30,8 +30,17 @@ enum CommandOutcome {
   /// l'état publié sur `gate/state` tranchera.
   noResponse,
 
-  /// Pas de session MQTT : rien n'a été envoyé (l'outbox de l'étape 5 prendra le relais).
+  /// Pas de session MQTT : rien n'a été publié. Signal interne, c'est l'appelant
+  /// qui décide d'abandonner ou de mettre en attente.
   notSent,
+
+  /// Mise en attente dans l'outbox, faute de session MQTT : « En attente » (§5).
+  queued,
+
+  /// TTL écoulé pendant l'attente hors ligne : abandonnée sans jamais avoir été
+  /// publiée, « Expirée, non envoyée ». Distinct de [rejectedExpired], où c'est
+  /// l'ESP32 qui a refusé une commande bel et bien reçue (§5).
+  expiredUnsent,
 }
 
 /// Accès aux données du portail (Model du MVVM) : traduit les messages MQTT

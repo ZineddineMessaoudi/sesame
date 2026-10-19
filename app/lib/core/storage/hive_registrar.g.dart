@@ -7,6 +7,8 @@ import 'package:sesame/core/storage/hive_adapters.dart';
 
 extension HiveRegistrar on HiveInterface {
   void registerAdapters() {
+    registerAdapter(GateActionAdapter());
+    registerAdapter(GateCommandAdapter());
     registerAdapter(GateSnapshotAdapter());
     registerAdapter(GateStateAdapter());
     registerAdapter(GateStatusAdapter());
@@ -15,6 +17,8 @@ extension HiveRegistrar on HiveInterface {
 
 extension IsolatedHiveRegistrar on IsolatedHiveInterface {
   void registerAdapters() {
+    registerAdapter(GateActionAdapter());
+    registerAdapter(GateCommandAdapter());
     registerAdapter(GateSnapshotAdapter());
     registerAdapter(GateStateAdapter());
     registerAdapter(GateStatusAdapter());
