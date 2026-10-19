@@ -58,8 +58,12 @@ class MqttService {
   /// Se connecte et réessaie avec un backoff exponentiel plafonné (1, 2, 4… 30 s)
   /// tant que [stop] n'a pas été appelé. Ensuite, `autoReconnect` de la librairie
   /// prend le relais pour les coupures en cours de session.
-  Future<void> start() =>
-      _starting ??= _connectLoop().whenComplete(() => _starting = null);
+  Future<void> start() {
+    // Posé ici et non dans la boucle : un start() qui suit un stop() pendant l'attente
+    // du backoff doit relancer la boucle déjà en cours, pas la laisser s'arrêter.
+    _wanted = true;
+    return _starting ??= _connectLoop().whenComplete(() => _starting = null);
+  }
 
   /// Déconnexion volontaire (ex. app en arrière-plan) : pas de reconnexion automatique.
   void stop() {
@@ -83,7 +87,6 @@ class MqttService {
   }
 
   Future<void> _connectLoop() async {
-    _wanted = true;
     var attempt = 0;
     while (_wanted && _sessionState != MqttSessionState.connected) {
       if (await _tryConnect()) return;
