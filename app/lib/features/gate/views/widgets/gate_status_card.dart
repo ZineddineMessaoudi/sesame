@@ -2,14 +2,25 @@ import 'package:flutter/material.dart';
 
 import '../../data/models/device_status.dart';
 import '../../data/models/gate_state.dart';
+import 'freshness_label.dart';
 
 /// Carte d'état du portail : widget « bête », il affiche ce qu'on lui donne.
 /// L'état ne repose jamais sur la couleur seule : icône + texte (§11).
 class GateStatusCard extends StatelessWidget {
-  const GateStatusCard({super.key, required this.gate, required this.device});
+  const GateStatusCard({
+    super.key,
+    required this.gate,
+    required this.device,
+    this.isLive = false,
+    this.confirmedAt,
+    this.clock = DateTime.now,
+  });
 
   final GateState? gate;
   final DeviceStatus? device;
+  final bool isLive;
+  final DateTime? confirmedAt;
+  final DateTime Function() clock;
 
   @override
   Widget build(BuildContext context) {
@@ -50,12 +61,12 @@ class GateStatusCard extends StatelessWidget {
             ),
             const SizedBox(height: 16),
             _DeviceStatusChip(device: device),
-            if (device == DeviceStatus.offline && gate != null) ...[
-              const SizedBox(height: 8),
-              Text(
-                'Dernier état connu : il peut avoir changé depuis.',
-                style: theme.textTheme.bodySmall,
-                textAlign: TextAlign.center,
+            if (gate != null) ...[
+              const SizedBox(height: 12),
+              FreshnessLabel(
+                isLive: isLive,
+                confirmedAt: confirmedAt,
+                clock: clock,
               ),
             ],
           ],

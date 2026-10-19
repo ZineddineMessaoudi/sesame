@@ -7,8 +7,10 @@ import 'package:sesame/core/mqtt/mqtt_service.dart';
 import 'package:sesame/core/mqtt/mqtt_topics.dart';
 import 'package:sesame/features/gate/data/gate_repository.dart';
 import 'package:sesame/features/gate/data/models/gate_command.dart';
+import 'package:sesame/features/gate/data/models/gate_snapshot.dart';
 
 import '../../../helpers/fake_mqtt.dart';
+import '../../../helpers/hive_box.dart';
 
 void main() {
   const topics = MqttTopics('site_test');
@@ -17,11 +19,12 @@ void main() {
   late GateRepository repository;
   var ids = 0;
 
-  setUp(() {
+  setUp(() async {
     (:mqtt, :inbound) = fakeMqtt();
     repository = GateRepository(
       mqtt,
       topics,
+      await openTestBox<GateSnapshot>(),
       clock: () => DateTime.utc(2026, 10, 19, 7, 30),
       newId: () => 'cmd-${ids++}',
       ackTimeout: const Duration(milliseconds: 50),

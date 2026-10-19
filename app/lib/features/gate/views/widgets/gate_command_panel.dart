@@ -67,8 +67,11 @@ class GateCommandPanel extends StatelessWidget {
             feedback: feedback,
             busy: _busy,
             onRetry: switch (commandState) {
+              // Pas de « Réessayer » sur une commande en attente : elle partira
+              // toute seule, et réessayer en empilerait une seconde.
               CommandFinished(:final action, :final outcome)
-                  when outcome != CommandOutcome.executed =>
+                  when outcome != CommandOutcome.executed &&
+                      outcome != CommandOutcome.queued =>
                 () => onRetry(action),
               CommandIdentityRefused(:final action, :final check)
                   when check == IdentityCheck.cancelled =>
@@ -90,6 +93,10 @@ class GateCommandPanel extends StatelessWidget {
       CommandOutcome.executed => 'Commande reçue par le portail.',
       CommandOutcome.noResponse => 'Pas de réponse du portail.',
       CommandOutcome.notSent => 'Hors connexion : commande non envoyée.',
+      CommandOutcome.queued =>
+        'Hors connexion : en attente, elle partira au retour du réseau.',
+      // Jamais publiée : on le dit, plutôt que de laisser croire à une ouverture.
+      CommandOutcome.expiredUnsent => 'Expirée, non envoyée.',
       CommandOutcome.rejectedExpired =>
         'Commande refusée : expirée. Vérifiez l\'heure du téléphone.',
       CommandOutcome.rejectedNoTime => 'Le portail n\'a pas encore l\'heure. Réessayez dans quelques secondes.',

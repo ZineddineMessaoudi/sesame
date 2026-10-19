@@ -1,24 +1,30 @@
 import 'dart:async';
 
 import 'package:flutter_test/flutter_test.dart';
+import 'package:hive_ce/hive_ce.dart';
 import 'package:mocktail/mocktail.dart';
 import 'package:sesame/core/mqtt/mqtt_service.dart';
 import 'package:sesame/core/mqtt/mqtt_topics.dart';
 import 'package:sesame/features/gate/data/gate_repository.dart';
 import 'package:sesame/features/gate/data/models/device_status.dart';
+import 'package:sesame/features/gate/data/models/gate_snapshot.dart';
 import 'package:sesame/features/gate/data/models/gate_state.dart';
 
 import '../../../helpers/fake_mqtt.dart';
+import '../../../helpers/hive_box.dart';
 
 void main() {
   const topics = MqttTopics('site_test');
   late StreamController<MqttInboundMessage> inbound;
   late MockMqttService mqtt;
   late GateRepository repository;
+  late Box<GateSnapshot> cache;
+  final now = DateTime.utc(2026, 10, 19, 10);
 
-  setUp(() {
+  setUp(() async {
     (:mqtt, :inbound) = fakeMqtt();
-    repository = GateRepository(mqtt, topics);
+    cache = await openTestBox<GateSnapshot>();
+    repository = GateRepository(mqtt, topics, cache, clock: () => now);
   });
 
   tearDown(() => repository.dispose());
@@ -41,7 +47,9 @@ void main() {
 
   Future<List<int>> seqsOf(void Function() publish) async {
     final seqs = <int>[];
-    final sub = repository.watchGateState().listen((s) => seqs.add(s.seq));
+    final sub = repository.watchGateState().listen(
+      (s) => seqs.add(s.state.seq),
+    );
     publish();
     await pumpEventQueue();
     await sub.cancel();
@@ -93,7 +101,9 @@ void main() {
 
   test('ignore un payload invalide sans casser le flux', () async {
     final received = <GateState>[];
-    final sub = repository.watchGateState().listen(received.add);
+    final sub = repository.watchGateState().listen(
+      (s) => received.add(s.state),
+    );
     inbound.add(
       MqttInboundMessage(
         topic: topics.gateState,
@@ -117,5 +127,72 @@ void main() {
     await sub.cancel();
 
     expect(received, [DeviceStatus.online, DeviceStatus.offline]);
+  });
+
+  group('cache Hive (offline-first)', () {
+    test('aucun état connu au tout premier lancement', () {
+      expect(repository.lastKnown, isNull);
+    });
+
+    test(
+      'met en cache chaque état accepté avec son heure de réception',
+      () async {
+        state('open', 3);
+        await pumpEventQueue();
+
+        expect(repository.lastKnown?.state.status, GateStatus.open);
+        expect(repository.lastKnown?.receivedAt, now);
+      },
+    );
+
+    test(
+      'un nouveau lancement retrouve le dernier état (hydratation)',
+      () async {
+        state('closing', 4);
+        await pumpEventQueue();
+        await repository.dispose();
+
+        // Même box, nouveau repository : comme un redémarrage de l'app hors ligne.
+        final restarted = GateRepository(mqtt, topics, cache);
+        addTearDown(restarted.dispose);
+
+        expect(restarted.lastKnown?.state.status, GateStatus.closing);
+        expect(restarted.lastKnown?.state.seq, 4);
+      },
+    );
+
+    test(
+      'confirmNow date le dernier état de maintenant, sans le changer',
+      () async {
+        state('open', 3);
+        await pumpEventQueue();
+        final later = now.add(const Duration(minutes: 10));
+        final confirming = GateRepository(
+          mqtt,
+          topics,
+          cache,
+          clock: () => later,
+        );
+        addTearDown(confirming.dispose);
+
+        final confirmed = confirming.confirmNow();
+
+        expect(confirmed?.state.status, GateStatus.open);
+        expect(confirmed?.receivedAt, later);
+        expect(confirming.lastKnown?.receivedAt, later); // persisté dans Hive
+      },
+    );
+
+    test('confirmNow sans état connu ne fait rien', () {
+      expect(repository.confirmNow(), isNull);
+    });
+
+    test('un doublon ignoré n\'écrase pas le cache', () async {
+      state('open', 5);
+      state('closed', 2); // en retard : ignoré
+      await pumpEventQueue();
+
+      expect(repository.lastKnown?.state.seq, 5);
+    });
   });
 }
