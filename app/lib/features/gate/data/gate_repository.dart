@@ -2,14 +2,17 @@ import 'dart:async';
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:hive_ce/hive_ce.dart';
 import 'package:uuid/uuid.dart';
 
 import '../../../core/config/app_config.dart';
 import '../../../core/mqtt/mqtt_service.dart';
 import '../../../core/mqtt/mqtt_topics.dart';
+import '../../../core/storage/local_storage.dart';
 import 'models/device_status.dart';
 import 'models/gate_ack.dart';
 import 'models/gate_command.dart';
+import 'models/gate_snapshot.dart';
 import 'models/gate_state.dart';
 
 /// Issue d'une commande, du point de vue de l'utilisateur.
@@ -32,11 +35,13 @@ enum CommandOutcome {
 }
 
 /// Accès aux données du portail (Model du MVVM) : traduit les messages MQTT
-/// bruts en objets métier. Seule couche de la feature qui connaît MQTT.
+/// bruts en objets métier et les met en cache dans Hive (réseau -> repository
+/// -> Hive -> Notifier -> UI, §5). Seule couche de la feature qui connaît MQTT et Hive.
 class GateRepository {
   GateRepository(
     this._mqtt,
-    this._topics, {
+    this._topics,
+    this._cache, {
     DateTime Function()? clock,
     String Function()? newId,
     this.ackTimeout = const Duration(seconds: 10),
@@ -51,6 +56,8 @@ class GateRepository {
 
   final MqttService _mqtt;
   final MqttTopics _topics;
+  final Box<GateSnapshot> _cache;
+  static const _cacheKey = 'current';
   final DateTime Function()
   _clock; // injectable : les tests maîtrisent le temps
   final String Function() _newId;
@@ -59,13 +66,16 @@ class GateRepository {
   final Duration ackTimeout;
   late final StreamSubscription<MqttInboundMessage> _sub;
 
-  final _gateStates = StreamController<GateState>.broadcast();
+  final _gateStates = StreamController<GateSnapshot>.broadcast();
   final _deviceStatuses = StreamController<DeviceStatus>.broadcast();
   final _acks = StreamController<GateAck>.broadcast();
 
   int? _lastSeq;
 
-  Stream<GateState> watchGateState() => _gateStates.stream;
+  /// Dernier état connu, lu dans Hive : affiché dès le démarrage, même hors ligne.
+  GateSnapshot? get lastKnown => _cache.get(_cacheKey);
+
+  Stream<GateSnapshot> watchGateState() => _gateStates.stream;
   Stream<DeviceStatus> watchDeviceStatus() => _deviceStatuses.stream;
 
   /// Démarre la connexion MQTT (idempotent) : les valeurs retenues arrivent ensuite.
@@ -129,7 +139,10 @@ class GateRepository {
     final last = _lastSeq;
     if (!message.retained && last != null && state.seq <= last) return;
     _lastSeq = state.seq;
-    _gateStates.add(state);
+    final snapshot = GateSnapshot(state: state, receivedAt: _clock());
+    // Écriture en mémoire immédiate, flush disque en arrière-plan : pas d'attente côté UI.
+    unawaited(_cache.put(_cacheKey, snapshot));
+    _gateStates.add(snapshot);
   }
 
   void _onDeviceStatus(MqttInboundMessage message) {
@@ -148,6 +161,7 @@ final gateRepositoryProvider = Provider<GateRepository>((ref) {
   final repository = GateRepository(
     ref.watch(mqttServiceProvider),
     MqttTopics(ref.watch(appConfigProvider).siteId),
+    ref.watch(localStorageProvider).gateState,
   );
   ref.onDispose(repository.dispose);
   return repository;
