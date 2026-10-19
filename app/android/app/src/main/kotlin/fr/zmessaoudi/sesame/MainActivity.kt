@@ -1,5 +1,6 @@
 package fr.zmessaoudi.sesame
 
-import io.flutter.embedding.android.FlutterActivity
+import io.flutter.embedding.android.FlutterFragmentActivity
 
-class MainActivity : FlutterActivity()
+// FragmentActivity : exigée par local_auth pour afficher la boîte de dialogue biométrique.
+class MainActivity : FlutterFragmentActivity()
