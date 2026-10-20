@@ -34,7 +34,7 @@ Projet de fin de module (Flutter + IoT), réalisé seul. Le portail est simulé 
 - **Node-RED** historise dans InfluxDB (rétention 30 jours), envoie les push FCM et expose l'API de l'historique : l'app ne touche jamais InfluxDB.
 - **Commandes sûres** : `open` / `close` explicites (jamais `toggle`), `cmdId` dédupliqué par l'ESP32, durée de vie de 60 s, refus tant que l'ESP32 n'a pas l'heure (NTP).
 
-Le détail des choix et de leurs limites est dans le [dossier technique](docs/dossier-technique.md) et les [ADR](docs/adr/).
+Les décisions structurantes sont détaillées dans les [ADR](docs/adr/).
 
 ## Dépôt
 
@@ -43,7 +43,7 @@ Le détail des choix et de leurs limites est dans le [dossier technique](docs/do
 | [`app/`](app/) | Application Flutter (`lib/core/` : MQTT, réseau, stockage, cycle de vie ; `lib/features/` : auth, gate, doorbell, history, camera) |
 | [`firmware/`](firmware/) | ESP32 (PlatformIO + Wokwi) : bouton, servomoteur, interrupteur de fin de course, LED |
 | [`backend/`](backend/) | `docker-compose.yml` : Node-RED, InfluxDB 2.7, MediaMTX ; flux Node-RED versionnés |
-| [`docs/`](docs/) | Dossier technique, ADR, préparation et checklist de démo |
+| [`docs/`](docs/) | ADR, préparation de la démo |
 
 ## Stack
 
@@ -115,4 +115,4 @@ Commits au format Conventional Commits, une branche par étape fusionnée dans `
 - MQTT uniquement en TLS (8883), WebRTC chiffré (DTLS-SRTP), stockage local chiffré.
 - Biométrie avant chaque ouverture, anti-rejeu par `cmdId` + date d'expiration.
 - `siteId` opaque, aucun identifiant utilisateur dans les messages, historique conservé 30 jours, aucune image ni vidéo enregistrée.
-- Limites connues (identifiants MQTT dans l'APK, certificat non vérifié par l'ESP32 simulé, MediaMTX sans authentification sur le réseau local) : voir le dossier technique.
+- Limites connues (identifiants MQTT dans l'APK, certificat non vérifié par l'ESP32 simulé, MediaMTX sans authentification sur le réseau local).
