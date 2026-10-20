@@ -14,8 +14,11 @@ rtspAddress: :8554
 # pas de serveur de signalisation à écrire). Chiffré de bout en bout (DTLS-SRTP).
 webrtc: yes
 webrtcAddress: :8889
-# Médias en UDP, et en TCP en repli si l'UDP ne passe pas (NAT de l'émulateur).
-webrtcLocalUDPAddress: :8189
+# Médias en TCP uniquement. En UDP, le relais de Docker Desktop perdait le flux
+# au hasard : connexion établie mais plus aucun paquet vidéo, écran noir
+# (« No decodable frame » côté Android, constaté le 20/10). Sur réseau local,
+# TCP ne change rien de visible à la latence, et le chiffrement est identique.
+webrtcLocalUDPAddress: ''
 webrtcLocalTCPAddress: :8189
 # Les adresses internes du conteneur sont injoignables de l'extérieur : on
 # n'annonce que celles par lesquelles on joint réellement l'hôte Docker.

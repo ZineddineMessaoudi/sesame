@@ -43,6 +43,12 @@ constexpr uint32_t NTP_RESYNC_WAIT_MS = 1200;
 // --- Commandes (§4) ---
 constexpr int64_t CMD_TTL_S = 60;           // durée de vie maximale d'une commande
 constexpr int64_t CLOCK_TOLERANCE_S = 5;    // écart d'horloge toléré téléphone / ESP32
+// Avance tolérée d'une commande sur notre horloge, plus large que l'expiration : sous
+// Wokwi, la simulation tourne à ~45 % du temps réel quand le servo bouge, et l'horloge
+// prend 5 à 11 s de retard entre deux synchros NTP (mesuré le 20/10). Sans danger pour
+// l'anti-rejeu : l'expiration reste stricte (5 s) et expiresAt - issuedAt <= 60 s, donc
+// la validité totale passe au pire de 65 à 90 s. Écart assumé au §4, documenté.
+constexpr int64_t FUTURE_TOLERANCE_S = 30;
 constexpr size_t DEDUP_SIZE = 16;           // nombre de cmdId acceptés mémorisés
 
 // --- Sonnette ---
@@ -253,7 +259,7 @@ const char* evaluateCommand(const char* cmdId, int64_t issuedAt, int64_t expires
   }
 
   const bool expired = now > expiresAt + CLOCK_TOLERANCE_S;
-  const bool fromFuture = issuedAt > now + CLOCK_TOLERANCE_S;
+  const bool fromFuture = issuedAt > now + FUTURE_TOLERANCE_S;
   if (expired || fromFuture) return "rejected_expired";
   return "accepted";
 }

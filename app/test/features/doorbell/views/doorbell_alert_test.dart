@@ -15,6 +15,7 @@ void main() {
     WidgetTester tester, {
     required Duration age,
     VoidCallback? onDismiss,
+    VoidCallback? onView,
   }) async {
     await tester.pumpWidget(
       MaterialApp(
@@ -22,6 +23,7 @@ void main() {
           body: DoorbellAlert(
             ring: ring,
             onDismiss: onDismiss ?? () {},
+            onView: onView,
             clock: () => receivedAt.add(age),
           ),
         ),
@@ -64,6 +66,22 @@ void main() {
     await tester.tap(find.byIcon(Icons.close));
 
     expect(dismissed, isTrue);
+    await dispose(tester);
+  });
+
+  testWidgets('« Voir qui est là » ouvre la caméra', (tester) async {
+    var viewed = false;
+    await pumpAlert(tester, age: Duration.zero, onView: () => viewed = true);
+
+    await tester.tap(find.byTooltip('Voir qui est là'));
+    expect(viewed, isTrue);
+    await dispose(tester);
+  });
+
+  testWidgets('sans caméra, pas de bouton « Voir »', (tester) async {
+    await pumpAlert(tester, age: Duration.zero);
+
+    expect(find.byTooltip('Voir qui est là'), findsNothing);
     await dispose(tester);
   });
 }

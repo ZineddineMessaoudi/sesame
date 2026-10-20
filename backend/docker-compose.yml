@@ -69,8 +69,7 @@ services:
     ports:
       - "8554:8554"       # RTSP : entrée, publiée par ffmpeg depuis l'hôte
       - "8889:8889"       # WebRTC (WHEP) : sortie vers l'app
-      - "8189:8189/udp"   # médias WebRTC
-      - "8189:8189/tcp"   # médias WebRTC, repli TCP
+      - "8189:8189/tcp"   # médias WebRTC (TCP seul, voir mediamtx.yml)
       - "8888:8888"       # HLS : repli
     environment:
       # Adresses annoncées aux lecteurs WebRTC. L'IP réseau du PC change avec le
