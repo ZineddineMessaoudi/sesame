@@ -12,6 +12,7 @@ class AppConfig {
     required this.mqttPassword,
     required this.siteId,
     required this.apiBaseUrl,
+    this.cameraUrl,
   });
 
   final String mqttHost;
@@ -20,6 +21,10 @@ class AppConfig {
   final String mqttPassword;
   final String siteId;
   final Uri apiBaseUrl;
+
+  /// Point WHEP de la caméra (phase 2). Facultatif : sans lui, l'app reste
+  /// complète, seul l'écran caméra affiche « non configurée ».
+  final Uri? cameraUrl;
 
   /// Lit les valeurs compilées et échoue tout de suite si l'une manque :
   /// mieux vaut un message clair au démarrage qu'une connexion MQTT muette en démo.
@@ -50,6 +55,7 @@ class AppConfig {
       throw StateError('MQTT_PORT invalide : "${values['MQTT_PORT']}".');
     }
 
+    const camera = String.fromEnvironment('CAMERA_URL');
     return AppConfig(
       mqttHost: values['MQTT_HOST']!,
       mqttPort: port,
@@ -57,6 +63,7 @@ class AppConfig {
       mqttPassword: values['MQTT_PASSWORD']!,
       siteId: values['SITE_ID']!,
       apiBaseUrl: Uri.parse(values['API_BASE_URL']!),
+      cameraUrl: camera.isEmpty ? null : Uri.parse(camera),
     );
   }
 }

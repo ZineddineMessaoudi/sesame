@@ -3,6 +3,7 @@
 # Démarrage :  docker compose up -d      (depuis backend/)
 # Node-RED  :  http://localhost:1880
 # InfluxDB  :  http://localhost:8086
+# MediaMTX  :  http://localhost:8889/portail  (vidéo, phase 2)
 #
 # Les secrets viennent de backend/.env (gitignoré), jamais du présent fichier.
 # Une seule instance Node-RED doit tourner à la fois : HiveMQ, InfluxDB et
@@ -59,3 +60,20 @@ services:
     volumes:
       - ./data/influxdb:/var/lib/influxdb2
       - ./data/influxdb-config:/etc/influxdb2
+
+  # Phase 2 : relais vidéo de la « caméra du portail » (webcam du PC).
+  mediamtx:
+    image: bluenviron/mediamtx:1.21.1
+    container_name: sesame-mediamtx
+    restart: unless-stopped
+    ports:
+      - "8554:8554"       # RTSP : entrée, publiée par ffmpeg depuis l'hôte
+      - "8889:8889"       # WebRTC (WHEP) : sortie vers l'app
+      - "8189:8189/tcp"   # médias WebRTC (TCP seul, voir mediamtx.yml)
+      - "8888:8888"       # HLS : repli
+    environment:
+      # Adresses annoncées aux lecteurs WebRTC. L'IP réseau du PC change avec le
+      # Wi-Fi (maison, école) : elle vient de backend/.env (MEDIAMTX_HOST_IP).
+      MTX_WEBRTCADDITIONALHOSTS: ${MEDIAMTX_HOST_IP:-127.0.0.1},127.0.0.1,10.0.2.2
+    volumes:
+      - ./mediamtx/mediamtx.yml:/mediamtx.yml:ro

@@ -35,6 +35,15 @@ class PushService {
     debugPrint('Push : abonné au topic FCM "$_siteId"');
   }
 
+  /// Appuis sur un push : app rouverte depuis l'arrière-plan, ou lancée par
+  /// la notification alors qu'elle était fermée. Node-RED ne pousse que des
+  /// sonneries (§9) : tout push ouvert mène à la caméra.
+  Stream<void> get opened async* {
+    final messaging = _messaging();
+    if (await messaging.getInitialMessage() != null) yield null;
+    yield* FirebaseMessaging.onMessageOpenedApp.map((_) {});
+  }
+
   /// À la déconnexion : sans cela, le téléphone continuerait de recevoir les
   /// sonneries du site sans être authentifié.
   Future<void> unsubscribe() async {

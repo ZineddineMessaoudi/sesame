@@ -30,6 +30,11 @@ class GatePage extends ConsumerWidget {
         title: const Text('Sésame'),
         actions: [
           IconButton(
+            onPressed: () => context.push(AppRoutes.camera),
+            icon: const Icon(Icons.videocam_outlined),
+            tooltip: 'Caméra',
+          ),
+          IconButton(
             onPressed: () => context.push(AppRoutes.history),
             icon: const Icon(Icons.history),
             tooltip: 'Historique',
@@ -62,6 +67,12 @@ class GatePage extends ConsumerWidget {
                             onDismiss: ref
                                 .read(doorbellViewModelProvider.notifier)
                                 .acknowledge,
+                            onView: () {
+                              ref
+                                  .read(doorbellViewModelProvider.notifier)
+                                  .acknowledge();
+                              context.push(AppRoutes.camera);
+                            },
                           ),
                           const SizedBox(height: 16),
                         ],

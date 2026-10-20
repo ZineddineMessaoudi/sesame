@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -16,6 +18,9 @@ abstract interface class NotificationService {
     required String title,
     required String body,
   });
+
+  /// Appuis sur une notification de l'app, y compris celui qui l'a lancée.
+  Stream<void> get opened;
 }
 
 class LocalNotificationService implements NotificationService {
@@ -24,6 +29,10 @@ class LocalNotificationService implements NotificationService {
 
   final FlutterLocalNotificationsPlugin _plugin;
   var _initialized = false;
+  final _opened = StreamController<void>.broadcast();
+
+  @override
+  Stream<void> get opened => _opened.stream;
 
   /// Canal dédié : l'utilisateur peut régler la sonnette sans toucher au reste.
   static const _channelId = 'doorbell';
@@ -39,7 +48,11 @@ class LocalNotificationService implements NotificationService {
         android: AndroidInitializationSettings('@mipmap/ic_launcher'),
         iOS: DarwinInitializationSettings(),
       ),
+      onDidReceiveNotificationResponse: (_) => _opened.add(null),
     );
+    // App fermée puis lancée par un appui sur la notification.
+    final launch = await _plugin.getNotificationAppLaunchDetails();
+    if (launch?.didNotificationLaunchApp ?? false) _opened.add(null);
 
     final android = _plugin
         .resolvePlatformSpecificImplementation<

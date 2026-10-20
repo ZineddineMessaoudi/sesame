@@ -14,11 +14,15 @@ class DoorbellAlert extends StatefulWidget {
     super.key,
     required this.ring,
     required this.onDismiss,
+    this.onView,
     this.clock = DateTime.now,
   });
 
   final DoorbellRing ring;
   final VoidCallback onDismiss;
+
+  /// Ouvre la caméra. Facultatif : sans caméra, l'alerte reste utile seule.
+  final VoidCallback? onView;
   final DateTime Function() clock; // injectable pour les tests
 
   @override
@@ -79,6 +83,13 @@ class _DoorbellAlertState extends State<DoorbellAlert> {
                 ),
               ),
             ),
+            if (widget.onView case final onView?)
+              IconButton(
+                onPressed: onView,
+                icon: const Icon(Icons.videocam),
+                color: colors.onTertiaryContainer,
+                tooltip: 'Voir qui est là',
+              ),
             // IconButton : 48 dp de cible tactile par défaut (§11).
             IconButton(
               onPressed: widget.onDismiss,
