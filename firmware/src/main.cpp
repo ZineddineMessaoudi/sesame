@@ -25,9 +25,11 @@ constexpr int ANGLE_OPEN = 90;
 constexpr uint32_t STEP_INTERVAL_MS = 45;
 
 // --- MQTT ---
-// Keep-alive court : le broker publie le LWT "offline" ~1,5 × keep-alive après une coupure,
-// soit ~22 s ; avec 60 s il faudrait 90 s pour voir l'équipement hors ligne en démo.
-constexpr uint16_t MQTT_KEEPALIVE_S = 15;
+// Le broker coupe un client muet après 1,5 × keep-alive de temps *réel*, mais l'ESP32
+// compte en temps *simulé*, plus lent sous Wokwi. À 15 s, le ping arrivait après les
+// 22,5 s réelles : reconnexion toutes les ~30 s, commandes et acks retardés (mesuré).
+// 30 s : marge pour une simulation jusqu'à ~1,5× plus lente, LWT visible en ~45 s.
+constexpr uint16_t MQTT_KEEPALIVE_S = 30;
 constexpr uint32_t MQTT_RETRY_MS = 5000;
 constexpr uint32_t NTP_WAIT_MS = 10000;
 // Resynchro NTP fréquente (15 s = minimum d'ESP-IDF, 1 h par défaut) : dans Wokwi la simulation

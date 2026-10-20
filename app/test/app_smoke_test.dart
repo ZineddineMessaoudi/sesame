@@ -1,5 +1,7 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:mocktail/mocktail.dart';
+import 'package:sesame/features/auth/data/auth_repository.dart';
 import 'package:sesame/app/app.dart';
 import 'package:sesame/core/config/app_config.dart';
 import 'package:sesame/core/connectivity/network_monitor.dart';
@@ -14,7 +16,10 @@ import 'helpers/fake_network.dart';
 import 'helpers/hive_box.dart';
 
 void main() {
-  testWidgets('l\'app démarre sur l\'écran du portail', (tester) async {
+  late MqttService mqtt;
+
+  Future<void> pumpApp(WidgetTester tester, {required AuthUser? user}) async {
+    mqtt = fakeMqtt().mqtt;
     final config = AppConfig(
       mqttHost: 'broker.test',
       mqttPort: 8883,
@@ -34,16 +39,43 @@ void main() {
         overrides: [
           appConfigProvider.overrideWithValue(config),
           // Pas de vraie connexion au broker dans un test.
-          mqttServiceProvider.overrideWithValue(fakeMqtt().mqtt),
+          mqttServiceProvider.overrideWithValue(mqtt),
           localStorageProvider.overrideWithValue(
             LocalStorage(gateState: box, outbox: outbox, events: events),
           ),
           networkMonitorProvider.overrideWithValue(FakeNetworkMonitor()),
+          authRepositoryProvider.overrideWithValue(_FixedSession(user)),
         ],
         child: const SesameApp(),
       ),
     );
+    await tester.pump();
+  }
 
-    expect(find.text('Sésame'), findsOneWidget);
+  testWidgets("connecté, l'app démarre sur l'écran du portail", (tester) async {
+    await pumpApp(tester, user: const AuthUser(uid: 'u-1'));
+
+    expect(find.byTooltip('Se déconnecter'), findsOneWidget);
   });
+
+  testWidgets("sans session, l'app démarre sur l'écran de connexion", (
+    tester,
+  ) async {
+    await pumpApp(tester, user: null);
+
+    expect(find.text('Se connecter'), findsOneWidget);
+    expect(find.byTooltip('Se déconnecter'), findsNothing);
+    // Le bug corrigé : déconnecté, l'app ne doit plus rien recevoir par MQTT.
+    verify(() => mqtt.allow(false)).called(1);
+    verifyNever(mqtt.start);
+  });
+}
+
+/// Session figée : ni Firebase ni réseau dans un test widget.
+class _FixedSession extends AuthRepository {
+  _FixedSession(this._user) : super(null);
+  final AuthUser? _user;
+
+  @override
+  AuthUser? get currentUser => _user;
 }

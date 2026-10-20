@@ -52,6 +52,8 @@ class MqttService {
   Future<void>? _starting;
   Completer<void>? _wakeUp; // non nul pendant l'attente du backoff
   bool _resetBackoff = false;
+  bool _allowed =
+      true; // faux sans session Firebase : aucun appelant ne connecte
 
   Stream<MqttInboundMessage> get messages => _messages.stream;
   Stream<MqttSessionState> get sessionStates => _sessionStates.stream;
@@ -61,6 +63,7 @@ class MqttService {
   /// tant que [stop] n'a pas été appelé. Ensuite, `autoReconnect` de la librairie
   /// prend le relais pour les coupures en cours de session.
   Future<void> start() {
+    if (!_allowed) return Future.value();
     // Posé ici et non dans la boucle : un start() qui suit un stop() pendant l'attente
     // du backoff doit relancer la boucle déjà en cours, pas la laisser s'arrêter.
     _wanted = true;
@@ -71,6 +74,16 @@ class MqttService {
   void stop() {
     _wanted = false;
     _client?.disconnect();
+  }
+
+  /// Lie la connexion à la session utilisateur. Interdire coupe la session en
+  /// cours et rend [start] sans effet : se déconnecter de l'app doit aussi
+  /// couper les sonneries et l'état reçus par MQTT, pas seulement changer
+  /// d'écran. Le verrou est ici plutôt que chez les appelants (écran du
+  /// portail, retour d'arrière-plan) : aucun ne peut l'oublier.
+  void allow(bool allowed) {
+    _allowed = allowed;
+    if (!allowed) stop();
   }
 
   /// Mémorise l'abonnement pour le rejouer après chaque (re)connexion.
