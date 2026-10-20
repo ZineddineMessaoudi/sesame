@@ -34,6 +34,13 @@ class PushService {
     await messaging.subscribeToTopic(_siteId);
     debugPrint('Push : abonné au topic FCM "$_siteId"');
   }
+
+  /// À la déconnexion : sans cela, le téléphone continuerait de recevoir les
+  /// sonneries du site sans être authentifié.
+  Future<void> unsubscribe() async {
+    await _messaging().unsubscribeFromTopic(_siteId);
+    debugPrint('Push : désabonné du topic FCM "$_siteId"');
+  }
 }
 
 final pushServiceProvider = Provider<PushService>(

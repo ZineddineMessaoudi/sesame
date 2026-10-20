@@ -5,6 +5,7 @@ import 'package:go_router/go_router.dart';
 import '../../../app/router.dart';
 import '../../../core/connectivity/connection_notifier.dart';
 import '../../../core/connectivity/connectivity_banner.dart';
+import '../../auth/viewmodels/session_view_model.dart';
 import '../../doorbell/viewmodels/doorbell_view_model.dart';
 import '../../doorbell/views/widgets/doorbell_alert.dart';
 
@@ -32,6 +33,11 @@ class GatePage extends ConsumerWidget {
             onPressed: () => context.push(AppRoutes.history),
             icon: const Icon(Icons.history),
             tooltip: 'Historique',
+          ),
+          IconButton(
+            onPressed: ref.read(sessionViewModelProvider.notifier).signOut,
+            icon: const Icon(Icons.logout),
+            tooltip: 'Se déconnecter',
           ),
         ],
       ),
